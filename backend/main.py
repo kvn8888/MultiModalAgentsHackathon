@@ -223,7 +223,10 @@ async def chat(req: ChatRequest):
                     if handler:
                         # Call the Railtracks @rt.function_node function directly
                         # @rt.function_node preserves the original async callable
-                        result = await handler(**fn_args)
+                        try:
+                            result = await handler(**fn_args)
+                        except Exception as tool_err:
+                            result = json.dumps({"error": f"Tool {fn_name} failed: {str(tool_err)}"})
                     else:
                         result = json.dumps({"error": f"Unknown tool: {fn_name}"})
 

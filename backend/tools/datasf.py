@@ -63,6 +63,12 @@ async def _query_socrata(dataset_id: str, params: dict) -> list[dict]:
         params["$limit"] = "200"
 
     response = await client.get(url, params=params, headers=headers)
+
+    # Some datasets return 404 for valid queries with no results —
+    # treat 404 as empty rather than crashing the agent.
+    if response.status_code == 404:
+        return []
+
     response.raise_for_status()
     return response.json()
 
