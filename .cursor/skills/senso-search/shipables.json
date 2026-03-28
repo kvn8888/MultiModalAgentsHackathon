@@ -1,0 +1,19 @@
+{
+  "version": "1.0.0",
+  "keywords": ["search", "knowledge-base", "rag", "semantic-search", "senso"],
+  "categories": ["ai-ml"],
+  "author": {
+    "name": "Senso",
+    "github": "senso-ai"
+  },
+  "config": {
+    "env": [
+      {
+        "name": "SENSO_API_KEY",
+        "description": "Senso API key for authenticating CLI commands",
+        "required": true,
+        "secret": true
+      }
+    ]
+  }
+}

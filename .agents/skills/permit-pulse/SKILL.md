@@ -1,0 +1,230 @@
+---
+name: permit-pulse
+description: >
+  PermitPulse project skill — the living source of truth for this repository.
+  Read this skill at the start of every new session to understand the project,
+  its architecture, tech stack, APIs, file layout, and current feature status.
+  Update this skill whenever features are added, changed, or removed so future
+  LLM sessions never need to re-learn the codebase from scratch.
+metadata:
+  author: PermitPulse Team
+  version: "0.1.0"
+  hackathon: Multimodal Frontier Hackathon — March 28, 2026
+---
+
+# PermitPulse — Project Skill
+
+> **Keep this file current.** Every time you add a feature, change architecture,
+> or fix a significant bug, update the relevant section below. This is the
+> onboarding doc for every future LLM session.
+
+---
+
+## 1. What Is PermitPulse?
+
+**One-liner:** An autonomous agent that ingests SF building-permit and violation
+data in real time, builds a growing knowledge base, and answers natural-language
+regulatory-intelligence queries for real-estate investors and developers.
+
+**Pitch:** Every major real-estate decision in San Francisco depends on
+regulatory risk — permits, violations, inspection history — but that data is
+scattered across municipal systems. PermitPulse continuously fetches, normalizes,
+and indexes this data, then answers investor questions like:
+
+- "Show me all active violations within 500 feet of 123 Main St"
+- "What's the average permit approval time in District 6?"
+
+The knowledge base improves with every query — a self-improving regulatory
+intelligence engine.
+
+**Target market:** Real-estate investors, developers, title companies, insurance
+underwriters. The US building-permit data market alone serves a $2 T+ industry.
+
+---
+
+## 2. Tech Stack & Sponsor Tools
+
+| Layer | Technology | Role |
+|---|---|---|
+| Agent orchestration | **Railtracks** (Python) | Define tools as `@rt.function_node`, agents as `rt.agent_node`, flows as `rt.Flow` |
+| Knowledge layer | **Senso.ai** Context OS | Ingest permit/violation docs, semantic search for RAG |
+| Frontend | **assistant-ui** (React) | Chat interface with streaming responses |
+| Deployment | **DigitalOcean** App Platform | Host backend + frontend |
+| Backend framework | **FastAPI** | HTTP API that bridges frontend ↔ Railtracks agent |
+| LLM | OpenAI GPT-4o (via Railtracks) | Agent reasoning |
+| Data source | SF DataSF / Socrata SODA API | Live municipal data |
+
+### Installed Shipables Skills
+
+```
+CoronRing/railtracks       1.0.0
+senso-ai/senso-search      1.0.0
+senso-ai/senso-ingest      1.0.0
+assistant-ui/assistant-ui  1.0.0
+```
+
+---
+
+## 3. Data Sources — SF DataSF (Socrata SODA)
+
+Base URL: `https://data.sfgov.org/resource/{dataset_id}.json`
+Auth: Unauthenticated (throttled to 1 000 req/hr — sufficient for hackathon).
+Format: JSON + SoQL query language.
+Pagination: `$limit` / `$offset`, default 1 000 rows.
+
+| Dataset | ID | Key Join Field |
+|---|---|---|
+| Building Permits (primary) | `i98e-djp9` | `permit_number`, `block`+`lot` |
+| Permit Contacts | `3mwf-svbh` | `permit_number` |
+| DBI Complaints | `gm2e-bten` | `complaint_number`, `block`+`lot` |
+| Notices of Violation | `nbtm-fbw5` | `complaint_number` |
+| Permit Addenda / Routing | `87xy-gk8d` | `application_number` |
+
+### Key SoQL patterns
+
+```
+# Recent permits in a neighborhood
+?$where=neighborhoods_analysis_boundaries='Mission' AND filed_date > '2025-01-01'
+&$order=filed_date DESC&$limit=50
+
+# Permits by status in a district
+?$select=status, count(*) as cnt&$where=supervisor_district='6'&$group=status
+
+# High-value permits
+?$where=estimated_cost > 1000000&$order=estimated_cost DESC&$limit=20
+```
+
+---
+
+## 4. Architecture
+
+```
+Frontend (assistant-ui / React)
+  │  HTTP / WebSocket
+  ▼
+Backend (FastAPI + Railtracks)
+  ├── Railtracks Flow: "query"
+  │     1. PermitPulse Agent (agent_node) — routes intent, calls tools
+  │     2. fetch_permits (function_node) — SoQL → DataSF → ingest into Senso
+  │     3. fetch_violations (function_node) — complaints + NOVs
+  │     4. search_knowledge (function_node) — Senso semantic search
+  │     5. fetch_nearby_parcels (function_node) — radius-based lookup
+  │
+  ├── Railtracks Flow: "ingest" (background)
+  │     - Startup + periodic: fetch last 7 days of permits & violations
+  │     - Normalize → batch ingest into Senso
+  │
+  └── External APIs
+        ├── DataSF Socrata  (data.sfgov.org)
+        ├── Senso Context OS (sdk.senso.ai)
+        └── OpenAI GPT-4o   (via Railtracks LLM)
+```
+
+### Self-Improvement Loop
+
+1. User asks a question about an area.
+2. Agent fetches fresh data from DataSF for that area.
+3. New records get ingested into Senso → knowledge base grows.
+4. Future queries about the same area return richer, faster results.
+5. This is the "continuously learns" differentiator.
+
+---
+
+## 5. Repository Layout
+
+> **Update this section** whenever files or directories are added/moved.
+
+```
+MultiModalAgentsHackathon/
+├── README.md                          # Project overview
+├── .claude/skills/                    # Claude Code skills
+│   ├── permit-pulse/SKILL.md          # ← YOU ARE HERE (project memory)
+│   ├── railtracks/                    # Railtracks skill (shipables)
+│   ├── senso-search/                  # Senso search skill (shipables)
+│   ├── senso-ingest/                  # Senso ingest skill (shipables)
+│   ├── assistant-ui/                  # assistant-ui skill (shipables)
+│   └── skill-creator/                 # Skill authoring guide
+├── .cursor/skills/                    # Cursor agent skills (mirrors .claude)
+├── .agents/skills/                    # Codex / Copilot / Gemini skills
+├── .github/                           # GitHub config
+└── .vscode/                           # VS Code settings
+```
+
+> Backend (`backend/`), frontend (`frontend/`), and infra files will appear
+> here as they are scaffolded.
+
+---
+
+## 6. Environment Variables
+
+| Variable | Purpose | Where |
+|---|---|---|
+| `OPENAI_API_KEY` | LLM calls via Railtracks | backend `.env` |
+| `SENSO_API_KEY` | Senso Context OS auth | backend `.env` |
+| `SENSO_ORG_ID` | Senso organization ID | backend `.env` |
+| `DATASF_APP_TOKEN` | (optional) higher Socrata rate limits | backend `.env` |
+
+---
+
+## 7. Feature Status
+
+> Mark features as they are implemented. This is the canonical tracker.
+
+| # | Feature | Status | Notes |
+|---|---|---|---|
+| 1 | Project scaffolding + sponsor skills installed | ✅ Done | Railtracks, Senso, assistant-ui |
+| 2 | DataSF fetcher tools (permits, violations, contacts) | 🔲 Not started | |
+| 3 | Senso ingestion pipeline | 🔲 Not started | |
+| 4 | Senso search integration | 🔲 Not started | |
+| 5 | Railtracks agent flow (query) | 🔲 Not started | |
+| 6 | Railtracks background ingest flow | 🔲 Not started | |
+| 7 | FastAPI backend API | 🔲 Not started | |
+| 8 | assistant-ui frontend | 🔲 Not started | |
+| 9 | DigitalOcean deployment | 🔲 Not started | |
+| 10 | Demo video + Devpost submission | 🔲 Not started | |
+
+---
+
+## 8. Key Decisions & Gotchas
+
+- **No maps or graph visualizations** — chat-only UI per spec.
+- **Fallbacks**: If Senso is down → in-memory keyword search. If DataSF is
+  slow → pre-fetched seed dataset cached in Senso.
+- **Railtracks pattern**: Tools are `@rt.function_node` with type hints +
+  docstrings. Agents are `rt.agent_node(...)`. Flows are `rt.Flow(...)`.
+- **Senso pattern**: Ingest via `POST /content/raw`, search via `POST /search`.
+  See `senso-ingest` and `senso-search` skills for details.
+- **assistant-ui pattern**: Scaffold with `npx assistant-ui create`, connect to
+  FastAPI backend via AI SDK route handler.
+
+---
+
+## 9. Commands Cheat Sheet
+
+```bash
+# Install sponsor skills
+npx @senso-ai/shipables install CoronRing/railtracks --all
+npx @senso-ai/shipables install senso-ai/senso-search --all
+npx @senso-ai/shipables install senso-ai/senso-ingest --all
+npx @senso-ai/shipables install assistant-ui/assistant-ui --all
+
+# List installed skills
+npx @senso-ai/shipables list
+
+# (future) Run backend
+cd backend && uvicorn main:app --reload
+
+# (future) Run frontend
+cd frontend && npm run dev
+```
+
+---
+
+## 10. How to Update This Skill
+
+When you add or change a feature:
+
+1. Update **Section 5 (Repo Layout)** if new files/dirs were created.
+2. Update **Section 7 (Feature Status)** — mark the feature ✅ or 🔄.
+3. Update **Section 8 (Decisions & Gotchas)** if you learned something new.
+4. Bump the `version` in the YAML frontmatter if it's a significant change.

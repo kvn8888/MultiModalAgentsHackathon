@@ -1,0 +1,18 @@
+{
+  "version": "1.0.0",
+  "keywords": [
+    "railtracks",
+    "agent",
+    "claude-code",
+    "python",
+    "mcp"
+  ],
+  "categories": [
+    "ai-agents",
+    "frameworks"
+  ],
+  "author": {
+    "name": "RailtownAI",
+    "github": "RailtownAI"
+  }
+}
