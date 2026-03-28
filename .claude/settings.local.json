@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/kevinc/Developer/AWSDeepAgentsHackathon -type f \\\\\\(-name *.py \\\\\\) ! -path */node_modules/* ! -path */.venv/*)",
+      "Bash(find /Users/kevinc/Developer/AWSDeepAgentsHackathon -type f \\\\\\(-name *.md -o -name *.txt \\\\\\) ! -path */node_modules/* ! -path */.git/*)",
+      "Bash(grep -r \"Ghost\\\\|ghost\" /Users/kevinc/Developer/AWSDeepAgentsHackathon --include=*.py --include=*.ts --include=*.tsx --include=*.json --include=*.yaml --include=*.yml)",
+      "Bash(grep -r \"auth0\\\\|@auth0\" /Users/kevinc/Developer/AWSDeepAgentsHackathon/homepage --include=*.ts --include=*.tsx --include=*.js)",
+      "Bash(find /Users/kevinc/Developer/AWSDeepAgentsHackathon -name *.md -o -name README*)",
+      "Bash(npm run:*)",
+      "Bash(python -c \"from agent.graph_queries import list_investigations, get_investigation, update_investigation_outcome, get_pattern_confidence; print\\(''OK''\\)\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(brew info:*)",
+      "Bash(render services:*)",
+      "Bash(render logs:*)",
+      "Bash(render deploys:*)",
+      "Bash(python -m agent.server)",
+      "Bash(curl -s http://localhost:8000/api/health)",
+      "Bash(xargs kill:*)",
+      "Bash(curl -s \"http://localhost:8000/api/investigate?q=Salesforce%20Tower\")",
+      "Bash(curl -v -N \"http://localhost:8000/api/investigate?q=Salesforce%20Tower\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8000/api/investigate?q=test\")"
+    ]
+  }
+}
