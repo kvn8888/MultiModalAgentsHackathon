@@ -8,7 +8,7 @@ description: >
   LLM sessions never need to re-learn the codebase from scratch.
 metadata:
   author: PermitPulse Team
-  version: "0.1.0"
+  version: "0.2.0"
   hackathon: Multimodal Frontier Hackathon — March 28, 2026
 ---
 
@@ -137,16 +137,6 @@ Backend (FastAPI + Railtracks)
 ```
 MultiModalAgentsHackathon/
 ├── README.md                          # Project overview
-├── backend/                           # Python backend
-│   ├── main.py                        # FastAPI app — routes, lifespan, CORS
-│   ├── agent.py                       # Railtracks agent + flow definition
-│   ├── config.py                      # Environment variables + constants
-│   ├── requirements.txt               # Python dependencies
-│   ├── .env.example                   # Template for env vars
-│   └── tools/                         # Tool implementations
-│       ├── __init__.py
-│       ├── datasf.py                  # DataSF Socrata API client (permits, violations, etc.)
-│       └── senso.py                   # Senso CLI wrapper (ingest + search)
 ├── .claude/skills/                    # Claude Code skills
 │   ├── permit-pulse/SKILL.md          # ← YOU ARE HERE (project memory)
 │   ├── railtracks/                    # Railtracks skill (shipables)
@@ -157,7 +147,9 @@ MultiModalAgentsHackathon/
 ├── .cursor/skills/                    # Cursor agent skills (mirrors .claude)
 ├── .agents/skills/                    # Codex / Copilot / Gemini skills
 ├── .github/                           # GitHub config
-└── .vscode/                           # VS Code settings
+├── .vscode/                           # VS Code settings
+├── .do/
+│   └── app.yaml                       # DigitalOcean App Platform deployment spec
 ├── frontend/                          # Next.js 16 frontend
 │   ├── src/app/page.tsx               # Main page — branding + chat
 │   ├── src/app/layout.tsx             # Root layout with TooltipProvider
@@ -168,8 +160,17 @@ MultiModalAgentsHackathon/
 │   ├── package.json                   # Next.js + AI SDK + assistant-ui deps
 │   ├── tsconfig.json                  # TypeScript config
 │   └── Dockerfile                     # Multi-stage Docker build (standalone)
-├── .do/
-│   └── app.yaml                       # DigitalOcean App Platform deployment spec
+└── backend/                           # Python backend
+    ├── main.py                        # FastAPI app — routes, lifespan, CORS
+    ├── agent.py                       # Railtracks agent + flow definition
+    ├── config.py                      # Environment variables + constants
+    ├── requirements.txt               # Python dependencies
+    ├── .env.example                   # Template for env vars
+    ├── Dockerfile                     # Multi-stage Python 3.11 build
+    └── tools/                         # Tool implementations
+        ├── __init__.py
+        ├── datasf.py                  # DataSF Socrata API client
+        └── senso.py                   # Senso CLI wrapper (ingest + search)
 ```
 
 ---
@@ -182,6 +183,8 @@ MultiModalAgentsHackathon/
 | `SENSO_API_KEY` | Senso Context OS auth | backend `.env` |
 | `SENSO_ORG_ID` | Senso organization ID | backend `.env` |
 | `DATASF_APP_TOKEN` | (optional) higher Socrata rate limits | backend `.env` |
+| `BACKEND_URL` | Python backend URL for API proxy | frontend (set by DO via `${backend.PRIVATE_URL}`) |
+| `OPENAI_API_KEY` | AI SDK streaming (proxy route) | frontend `.env.local` or DO secret |
 
 ---
 
@@ -211,7 +214,8 @@ MultiModalAgentsHackathon/
   slow → pre-fetched seed dataset cached in Senso.
 - **Railtracks pattern**: Tools are `@rt.function_node` with type hints +
   docstrings. Agents are `rt.agent_node(...)`. Flows are `rt.Flow(...)`.
-- **Senso pattern**: Ingest via `POST /content/raw`, search via `POST /search`.
+- **Senso pattern**: Ingest via CLI `senso kb create-raw --data '<json>'`,
+  search via `senso search context "<query>"`. Both use `--output json --quiet`.
   See `senso-ingest` and `senso-search` skills for details.
 - **AI SDK v5 breaking changes**: `toTextStreamResponse()` not `toDataStreamResponse()`.
   `useChatRuntime` uses `transport: new TextStreamChatTransport({ api })` not `{ api }` directly.
