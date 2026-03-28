@@ -216,6 +216,9 @@ MultiModalAgentsHackathon/
 - **Senso pattern**: Ingest via CLI `senso kb create-raw --data '<json>'`,
   search via `senso search context "<query>"`. Both use `--output json --quiet`.
   See `senso-ingest` and `senso-search` skills for details.
+- **Senso runtime**: The backend tries a global `senso` binary first and falls
+  back to `npx @senso-ai/cli` in local dev. The backend Docker image installs
+  `@senso-ai/cli` so per-query ingestion works in deployment too.
 - **AI SDK v5 breaking changes**: `toTextStreamResponse()` not `toDataStreamResponse()`.
   `useChatRuntime` uses `transport: new TextStreamChatTransport({ api })` not `{ api }` directly.
 - **assistant-ui auto-generated components** have `render=` prop patterns that may

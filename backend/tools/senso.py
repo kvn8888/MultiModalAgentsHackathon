@@ -18,6 +18,7 @@ and output formatting for us.
 import asyncio
 import json
 import os
+import shutil
 from config import SENSO_API_KEY
 
 
@@ -39,9 +40,23 @@ async def _run_senso_cmd(args: list[str]) -> dict | list:
     Raises:
         RuntimeError: If the CLI exits with a non-zero code.
     """
-    cmd = ["senso"] + args + ["--output", "json", "--quiet"]
+    if not SENSO_API_KEY:
+        raise RuntimeError("SENSO_API_KEY is not set")
 
-    # Ensure the API key is in the subprocess environment
+    if shutil.which("senso"):
+        base_cmd = ["senso"]
+    elif shutil.which("npx"):
+        # Local dev often has the CLI available through npx even when the
+        # global `senso` binary is not installed.
+        base_cmd = ["npx", "@senso-ai/cli"]
+    else:
+        raise RuntimeError(
+            "Senso CLI not found. Install @senso-ai/cli or provide npx in PATH."
+        )
+
+    cmd = base_cmd + ["--api-key", SENSO_API_KEY] + args + ["--output", "json", "--quiet"]
+
+    # Pass through the environment as-is so local config and CI secrets still work.
     env = os.environ.copy()
     env["SENSO_API_KEY"] = SENSO_API_KEY
 

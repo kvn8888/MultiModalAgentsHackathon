@@ -32,6 +32,13 @@ FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Install Node.js + npm so the Senso CLI can run inside the backend container.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends nodejs npm && \
+    npm install -g @senso-ai/cli && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy the pre-built virtual environment from the builder stage
 COPY --from=builder /opt/venv /opt/venv
 
