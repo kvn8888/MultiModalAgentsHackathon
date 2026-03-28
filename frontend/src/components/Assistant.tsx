@@ -1,9 +1,13 @@
 /**
  * Assistant.tsx — The main chat interface component for PermitPulse.
  *
- * Uses assistant-ui's Thread component with an AI SDK runtime.
- * The runtime connects to our Next.js API route (/api/chat) which
- * proxies requests to the Python FastAPI backend.
+ * Uses a split-pane layout:
+ *   - Left pane: assistant-ui Thread for conversational Q&A
+ *   - Right pane: LiveDataPanel showing real-time fetched data
+ *
+ * The split layout makes PermitPulse look and feel like a research tool
+ * rather than a chatbot — the chat is the Q&A layer, the panel is the
+ * intelligence layer.
  *
  * This is a client component because assistant-ui manages state on the client.
  */
@@ -14,18 +18,24 @@ import { useEffect, useState } from "react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import { Thread } from "@/components/assistant-ui/thread";
+import { LiveDataPanel } from "@/components/LiveDataPanel";
 import { TextStreamChatTransport } from "ai";
 import { Button } from "@/components/ui/button";
-import { KeyRoundIcon, Settings2Icon } from "lucide-react";
+import { KeyRoundIcon, Settings2Icon, PanelRightOpenIcon, PanelRightCloseIcon } from "lucide-react";
 
+// LocalStorage key for persisting the Gemini API key across sessions
 const GEMINI_KEY_STORAGE_KEY = "permitpulse.geminiApiKey";
 
 export function Assistant() {
+  // ── State for the runtime Gemini API key ──────────────────────────────
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [isHydrated, setIsHydrated] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  // Whether the data panel is visible (collapsible on smaller screens)
+  const [panelOpen, setPanelOpen] = useState(true);
 
+  // Load saved key from localStorage on mount
   useEffect(() => {
     const savedKey = window.localStorage.getItem(GEMINI_KEY_STORAGE_KEY) ?? "";
     setGeminiApiKey(savedKey);
@@ -33,6 +43,7 @@ export function Assistant() {
     setIsHydrated(true);
   }, []);
 
+  // Connect to the AI SDK runtime via a text stream transport
   const runtime = useChatRuntime({
     transport: new TextStreamChatTransport({
       api: "/api/chat",
@@ -58,8 +69,8 @@ export function Assistant() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className="flex h-full flex-col">
-        {/* Key banner — compact when key is saved, expanded when editing */}
+      <div className="flex h-full w-full flex-col">
+        {/* API key banner — compact when saved, expanded when editing */}
         {(!hasKey || isExpanded) ? (
           <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
             <div className="mx-auto flex w-full max-w-5xl flex-col gap-2 md:flex-row md:items-center">
@@ -109,19 +120,46 @@ export function Assistant() {
                 <KeyRoundIcon className="size-3" />
                 <span>Gemini API key configured</span>
               </div>
-              <button
-                onClick={() => { setInputValue(geminiApiKey); setIsExpanded(true); }}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-              >
-                <Settings2Icon className="size-3" />
-                Change
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setInputValue(geminiApiKey); setIsExpanded(true); }}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                >
+                  <Settings2Icon className="size-3" />
+                  Change
+                </button>
+                {/* Toggle data panel button */}
+                <button
+                  onClick={() => setPanelOpen((v) => !v)}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 lg:hidden"
+                  title={panelOpen ? "Hide panel" : "Show panel"}
+                >
+                  {panelOpen ? (
+                    <PanelRightCloseIcon className="size-3" />
+                  ) : (
+                    <PanelRightOpenIcon className="size-3" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        <div className="min-h-0 flex-1">
-          <Thread />
+        {/* Split layout: Chat thread (left) + Intelligence panel (right) */}
+        <div className="flex min-h-0 flex-1">
+          {/* Chat pane — takes remaining width */}
+          <div className="min-h-0 min-w-0 flex-1">
+            <Thread />
+          </div>
+
+          {/* Intelligence panel — fixed width on large screens, hidden on small */}
+          <div
+            className={`hidden lg:flex min-h-0 w-[380px] shrink-0 transition-all duration-300 ${
+              panelOpen ? "translate-x-0" : "translate-x-full w-0 overflow-hidden"
+            }`}
+          >
+            <LiveDataPanel />
+          </div>
         </div>
       </div>
     </AssistantRuntimeProvider>

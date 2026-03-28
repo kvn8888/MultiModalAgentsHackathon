@@ -1,13 +1,17 @@
 /**
  * page.tsx — Main page of the PermitPulse app.
  *
- * Renders a full-screen chat interface powered by assistant-ui.
- * The header shows the PermitPulse branding, and the rest of the
- * viewport is the chat thread where users interact with the agent.
+ * Uses a split-pane layout:
+ *   - Left: Chat interface (the Q&A layer)
+ *   - Right: Live data panel (the intelligence layer)
+ *
+ * The split layout transforms PermitPulse from "a chatbot with a knowledge
+ * base" into "a regulatory intelligence research tool" — the chat is where
+ * you ask questions, the panel is where you see the data the agent found.
  */
 
 import { Assistant } from "@/components/Assistant";
-import { KBCounter } from "@/components/KBCounter";
+import { ProactiveIntelFeed } from "@/components/ProactiveIntelFeed";
 
 export default function Home() {
   return (
@@ -15,7 +19,7 @@ export default function Home() {
       {/* Header bar with product branding */}
       <header className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-3">
         <div className="flex items-center gap-3">
-          {/* Pulse icon — simple CSS circle with animation */}
+          {/* Pulse icon — animated concentric circles */}
           <div className="relative flex h-8 w-8 items-center justify-center">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
             <span className="relative inline-flex h-5 w-5 rounded-full bg-blue-500" />
@@ -29,16 +33,19 @@ export default function Home() {
             </p>
           </div>
         </div>
-        {/* Status indicators */}
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-          <span>Live — DataSF connected</span>
-          <KBCounter />
+
+        {/* Right side: status + proactive intel feed */}
+        <div className="flex items-center gap-3 text-xs text-zinc-400">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+            <span>Live — DataSF</span>
+          </span>
+          <ProactiveIntelFeed />
         </div>
       </header>
 
-      {/* Chat area — fills remaining viewport height */}
-      <main className="flex-1 overflow-hidden">
+      {/* Split layout: chat + intelligence panel */}
+      <main className="flex flex-1 overflow-hidden">
         <Assistant />
       </main>
     </div>

@@ -7,9 +7,9 @@ import {
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
-import { ActivityTrail, type ActivityStep } from "@/components/ActivityTrail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAgentStore, type AgentStep } from "@/lib/agent-store";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
@@ -35,12 +35,59 @@ import {
   PencilIcon,
   RefreshCwIcon,
   SquareIcon,
+  DatabaseIcon,
+  SearchIcon,
+  AlertTriangleIcon,
+  FileTextIcon,
+  Loader2Icon,
+  ZapIcon,
 } from "lucide-react";
-import { type FC, useMemo } from "react";
+import { type FC, useMemo, useEffect, useRef } from "react";
 
-// ── Activity parsing ─────────────────────────────────────────────────────────
+// ── Marker parsing ──────────────────────────────────────────────────────────
+// The route.ts SSE consumer embeds markers in the text stream as the agent
+// works.  We parse these markers out so we can:
+//   1. Show streaming activity steps (tool running / complete animations)
+//   2. Push permit/violation data to the global store for the data panel
+//   3. Strip markers from the visible text so the user sees clean markdown
 
-const ACTIVITY_SENTINEL = "<!-- PERMITPULSE_ACTIVITY:";
+const STEP_MARKER = /<!-- STEP:(.*?) -->/g;
+const PERMITS_MARKER = /<!-- PERMITS:(.*?) -->/g;
+const VIOLATIONS_MARKER = /<!-- VIOLATIONS:(.*?) -->/g;
+// Legacy sentinel from the non-streaming endpoint (still supported)
+const LEGACY_ACTIVITY = /<!-- PERMITPULSE_ACTIVITY:.*? -->/g;
+
+/** Extract all STEP markers from a text string */
+function parseSteps(text: string): AgentStep[] {
+  const steps: AgentStep[] = [];
+  let match;
+  const re = new RegExp(STEP_MARKER.source, "g");
+  while ((match = re.exec(text)) !== null) {
+    try {
+      const data = JSON.parse(match[1]);
+      steps.push({ ...data, timestamp: Date.now() });
+    } catch { /* skip malformed */ }
+  }
+  return steps;
+}
+
+/** Strip all embedded markers from text so the user sees clean markdown */
+function stripMarkers(text: string): string {
+  return text
+    .replace(STEP_MARKER, "")
+    .replace(PERMITS_MARKER, "")
+    .replace(VIOLATIONS_MARKER, "")
+    .replace(LEGACY_ACTIVITY, "")
+    .replace(/^\n+/, ""); // trim leading newlines from stripped markers
+}
+
+// ── Tool icon mapping for inline activity ────────────────────────────────────
+const TOOL_ICONS: Record<string, { icon: React.ElementType; color: string }> = {
+  tool_fetch_permits: { icon: DatabaseIcon, color: "text-blue-500" },
+  tool_search_knowledge: { icon: SearchIcon, color: "text-violet-500" },
+  tool_fetch_violations: { icon: AlertTriangleIcon, color: "text-amber-500" },
+  tool_fetch_permit_details: { icon: FileTextIcon, color: "text-emerald-500" },
+};
 
 // ── Domain suggestions ───────────────────────────────────────────────────────
 
@@ -201,33 +248,76 @@ const MessageError: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
-  // Return the raw JSON string (a primitive) to avoid returning a new array
-  // reference on every render, which would cause an infinite re-render loop.
-  const activityJson = useAuiState((s: any) => {
+  // Read the full text content as a stable string primitive
+  const rawText = useAuiState((s: any) => {
     const content = s.message.content;
-    if (!Array.isArray(content)) return null;
-    const text = content
+    if (!Array.isArray(content)) return "";
+    return content
       .filter((p: any) => p.type === "text")
       .map((p: any) => p.text ?? "")
       .join("");
-    const start = text.indexOf(ACTIVITY_SENTINEL);
-    if (start === -1) return null;
-    const jsonStart = start + ACTIVITY_SENTINEL.length;
-    const end = text.indexOf(" -->", jsonStart);
-    if (end === -1) return null;
-    return text.slice(jsonStart, end); // stable primitive — only changes when text changes
   });
 
-  // Parse the JSON string outside the selector so we get a stable array reference
-  const activity = useMemo(() => {
-    if (!activityJson) return null;
-    try {
-      const data = JSON.parse(activityJson);
-      return Array.isArray(data.steps) ? (data.steps as ActivityStep[]) : null;
-    } catch {
-      return null;
+  // Parse streaming activity steps from the embedded markers
+  const steps = useMemo(() => parseSteps(rawText), [rawText]);
+
+  // Track which permits/violations we've already pushed to the store
+  // to avoid duplicate pushes on re-renders
+  const pushedPermitsRef = useRef(0);
+  const pushedViolationsRef = useRef(0);
+
+  // Push new permits to the global store as they stream in
+  useEffect(() => {
+    const re = new RegExp(PERMITS_MARKER.source, "g");
+    let match;
+    const allPermits: any[] = [];
+    while ((match = re.exec(rawText)) !== null) {
+      try {
+        const data = JSON.parse(match[1]);
+        if (Array.isArray(data)) allPermits.push(...data);
+      } catch { /* skip */ }
     }
-  }, [activityJson]);
+    // Only push permits we haven't pushed yet
+    if (allPermits.length > pushedPermitsRef.current) {
+      const newPermits = allPermits.slice(pushedPermitsRef.current);
+      useAgentStore.getState().addPermits(newPermits);
+      pushedPermitsRef.current = allPermits.length;
+    }
+  }, [rawText]);
+
+  // Push new violations to the global store
+  useEffect(() => {
+    const re = new RegExp(VIOLATIONS_MARKER.source, "g");
+    let match;
+    const allViolations: any[] = [];
+    while ((match = re.exec(rawText)) !== null) {
+      try {
+        const data = JSON.parse(match[1]);
+        if (data.violations) allViolations.push(...data.violations);
+      } catch { /* skip */ }
+    }
+    if (allViolations.length > pushedViolationsRef.current) {
+      const newViolations = allViolations.slice(pushedViolationsRef.current);
+      useAgentStore.getState().addViolations(newViolations);
+      pushedViolationsRef.current = allViolations.length;
+    }
+  }, [rawText]);
+
+  // Push steps to the global store for the LiveDataPanel
+  const pushedStepsRef = useRef(0);
+  useEffect(() => {
+    if (steps.length > pushedStepsRef.current) {
+      const newSteps = steps.slice(pushedStepsRef.current);
+      for (const step of newSteps) {
+        useAgentStore.getState().addStep(step);
+      }
+      pushedStepsRef.current = steps.length;
+    }
+  }, [steps]);
+
+  // Check if the message is still streaming (has running steps but no answer yet)
+  const hasRunningSteps = steps.some((s) => s.status === "running");
+  const cleanText = useMemo(() => stripMarkers(rawText), [rawText]);
 
   return (
     <MessagePrimitive.Root
@@ -235,7 +325,82 @@ const AssistantMessage: FC = () => {
       data-role="assistant"
     >
       <div className="aui-assistant-message-content wrap-break-word px-2 text-foreground leading-relaxed">
-        {activity && <ActivityTrail steps={activity} />}
+        {/* Inline streaming activity trail — shows steps animating in real time */}
+        {steps.length > 0 && (
+          <div className="mb-3 overflow-hidden rounded-xl border border-zinc-100 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-900/60">
+            <div className="flex items-center gap-2 border-b border-zinc-100 px-3 py-1.5 dark:border-zinc-800">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+                Agent Activity
+              </span>
+              {hasRunningSteps && (
+                <Loader2Icon className="size-3 animate-spin text-blue-500" />
+              )}
+              <span className="ml-auto text-[10px] text-zinc-300 dark:text-zinc-600">
+                {steps.length} step{steps.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800">
+              {steps.map((step, i) => {
+                const config = TOOL_ICONS[step.tool] ?? {
+                  icon: ZapIcon,
+                  color: "text-zinc-400",
+                };
+                const Icon = config.icon;
+                const isRunning = step.status === "running";
+                const isError = step.status === "error";
+
+                return (
+                  <div
+                    key={i}
+                    className={`flex items-center gap-3 px-3 py-2 animate-in fade-in slide-in-from-bottom-1 duration-200 ${
+                      isRunning ? "bg-blue-50/60 dark:bg-blue-950/20" : ""
+                    } ${isError ? "bg-red-50/60 dark:bg-red-950/20" : ""}`}
+                    style={{ animationDelay: `${i * 60}ms` }}
+                  >
+                    {isRunning ? (
+                      <Loader2Icon className="size-3.5 shrink-0 animate-spin text-blue-500" />
+                    ) : (
+                      <div className={`flex size-6 shrink-0 items-center justify-center rounded-md ${
+                        isError
+                          ? "bg-red-50 dark:bg-red-950/40"
+                          : step.tool === "tool_fetch_permits"
+                            ? "bg-blue-50 dark:bg-blue-950/40"
+                            : step.tool === "tool_search_knowledge"
+                              ? "bg-violet-50 dark:bg-violet-950/40"
+                              : step.tool === "tool_fetch_violations"
+                                ? "bg-amber-50 dark:bg-amber-950/40"
+                                : "bg-emerald-50 dark:bg-emerald-950/40"
+                      }`}>
+                        <Icon className={`size-3.5 ${isError ? "text-red-500" : config.color}`} />
+                      </div>
+                    )}
+                    <span className={`flex-1 text-xs ${
+                      isRunning
+                        ? "text-blue-600 dark:text-blue-400"
+                        : isError
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-zinc-600 dark:text-zinc-400"
+                    }`}>
+                      {step.label}
+                    </span>
+                    {step.count != null && step.status === "complete" && (
+                      <span className="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">
+                        {step.count} records
+                      </span>
+                    )}
+                    {step.red_flags != null && step.red_flags > 0 && (
+                      <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-600 dark:bg-red-900/30 dark:text-red-400">
+                        {step.red_flags} red flag{step.red_flags !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* The actual answer text (with markers stripped out) */}
         <MessagePrimitive.Parts>
           {({ part }) => {
             if (part.type === "text") return <MarkdownText />;
