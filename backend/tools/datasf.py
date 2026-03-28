@@ -66,7 +66,8 @@ async def _query_socrata(dataset_id: str, params: dict) -> list[dict]:
 
     # Some datasets return 404 for valid queries with no results —
     # treat 404 as empty rather than crashing the agent.
-    if response.status_code == 404:
+    # 400 can happen if a field name doesn't exist in the dataset.
+    if response.status_code in (400, 404):
         return []
 
     response.raise_for_status()
@@ -119,18 +120,23 @@ async def fetch_complaints(
     where_clause: str = "",
     block: str = "",
     lot: str = "",
+    neighborhood: str = "",
     limit: int = 200,
 ) -> list[dict]:
     """
     Fetch DBI complaints from DataSF.
 
-    You can filter by a SoQL where clause, or by block+lot parcel identifiers,
-    or both.
+    You can filter by a SoQL where clause, by block+lot parcel identifiers,
+    by neighborhood name, or any combination.
+
+    NOTE: The complaints dataset uses 'analysis_neighborhood' (not
+    'neighborhoods_analysis_boundaries' like permits/violations).
 
     Args:
         where_clause: SoQL $where expression.
         block:        Parcel block number (4-digit string).
         lot:          Parcel lot number (3-digit string).
+        neighborhood: Neighborhood name (e.g. 'Mission') — maps to analysis_neighborhood.
         limit:        Max rows.
 
     Returns:
@@ -139,11 +145,18 @@ async def fetch_complaints(
     # Build the where clause by combining the explicit clause with block/lot filters
     conditions: list[str] = []
     if where_clause:
-        conditions.append(where_clause)
+        # Fix common field-name mistake: the complaints dataset uses
+        # analysis_neighborhood, not neighborhoods_analysis_boundaries.
+        fixed = where_clause.replace(
+            "neighborhoods_analysis_boundaries", "analysis_neighborhood"
+        )
+        conditions.append(fixed)
     if block:
         conditions.append(f"block='{block}'")
     if lot:
         conditions.append(f"lot='{lot}'")
+    if neighborhood:
+        conditions.append(f"analysis_neighborhood='{neighborhood}'")
 
     params: dict = {
         "$limit": str(limit),
@@ -159,17 +172,20 @@ async def fetch_violations(
     complaint_number: str = "",
     block: str = "",
     lot: str = "",
+    where_clause: str = "",
     limit: int = 200,
 ) -> list[dict]:
     """
     Fetch Notices of Violation (NOVs) from DataSF.
 
-    Can filter by complaint_number (join key to complaints) or by block/lot.
+    Can filter by complaint_number (join key to complaints), block/lot,
+    or a raw SoQL where clause.
 
     Args:
         complaint_number: Link to a specific complaint.
         block:            Parcel block number.
         lot:              Parcel lot number.
+        where_clause:     Raw SoQL $where expression.
         limit:            Max rows.
 
     Returns:
@@ -177,6 +193,8 @@ async def fetch_violations(
         work_without_permit, unsafe_building, etc.
     """
     conditions: list[str] = []
+    if where_clause:
+        conditions.append(where_clause)
     if complaint_number:
         conditions.append(f"complaint_number='{complaint_number}'")
     if block:
