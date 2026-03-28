@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
         recent = await datasf.fetch_permits(limit=20)
         if recent:
             await senso.ingest_permits(recent)
+            _stats["permits_ingested"] += len(recent)
             print(f"✅ Seeded {len(recent)} permits into Senso knowledge base")
     except Exception as e:
         # Don't crash on startup if Senso or DataSF is down
@@ -65,6 +66,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Server-side stats counter ────────────────────────────────────────────────
+# Tracks cumulative records ingested across the server's lifetime.
+# Resets when the server restarts, but persists across page refreshes.
+_stats = {
+    "permits_ingested": 0,
+    "violations_ingested": 0,
+    "queries_handled": 0,
+}
 
 
 # ── Request / Response models ────────────────────────────────────────────────
@@ -102,6 +113,21 @@ class IngestResponse(BaseModel):
 async def health():
     """Health check — returns 200 if the server is up."""
     return {"status": "ok", "service": "PermitPulse"}
+
+
+@app.get("/api/stats")
+async def stats():
+    """Return cumulative ingestion and query stats since server start.
+
+    The frontend polls this on mount so the KB counter shows the real
+    count instead of resetting to 20 on every page refresh.
+    """
+    return {
+        "permits_ingested": _stats["permits_ingested"],
+        "violations_ingested": _stats["violations_ingested"],
+        "queries_handled": _stats["queries_handled"],
+        "total_records": _stats["permits_ingested"] + _stats["violations_ingested"],
+    }
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -484,6 +510,8 @@ async def chat_stream(req: ChatRequest):
                             entry["label"] = f"Fetched {count} live permits from DataSF"
                             entry["count"] = count
                             entry["indexed"] = count
+                            # Track towards server-side stats (ingestion happens inside the tool)
+                            _stats["permits_ingested"] += count
                             # Also emit structured permit data for the data panel
                             permits = result_data.get("permits", [])
                             if permits:
@@ -542,6 +570,9 @@ async def chat_stream(req: ChatRequest):
         except Exception as e:
             yield _sse("error", {"message": str(e)})
 
+    # Track this query against the server-side stats counter
+    _stats["queries_handled"] += 1
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
@@ -573,6 +604,7 @@ async def ingest(req: IngestRequest):
     if permits:
         try:
             permit_results = await senso.ingest_permits(permits)
+            _stats["permits_ingested"] += len([r for r in permit_results if "error" not in r])
         except Exception:
             pass
 
@@ -582,6 +614,7 @@ async def ingest(req: IngestRequest):
     if violations:
         try:
             violation_results = await senso.ingest_violations(violations)
+            _stats["violations_ingested"] += len([r for r in violation_results if "error" not in r])
         except Exception:
             pass
 

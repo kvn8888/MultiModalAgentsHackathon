@@ -12,6 +12,7 @@
 
 "use client";
 
+import { useEffect } from "react";
 import { useAgentStore } from "@/lib/agent-store";
 import {
   BrainCircuitIcon,
@@ -41,15 +42,34 @@ function timeAgo(timestamp: number): string {
 }
 
 export function ProactiveIntelFeed() {
-  // Subscribe to the full feed + indexed count from the store.
+  // Subscribe to the full feed + indexed counts from the store.
   // IMPORTANT: do NOT call .slice() inside the selector — that creates a new
   // array reference on every render, causing zustand's strict-equality check
   // to think state changed → infinite re-render loop.
   const intelFeed = useAgentStore((s) => s.intelFeed);
   const totalIndexed = useAgentStore((s) => s.totalRecordsIndexed);
+  const baseIndexed = useAgentStore((s) => s.baseRecordsIndexed);
+  const seedStats = useAgentStore((s) => s.seedStats);
+
+  // Fetch real server-side stats on mount so the KB counter doesn't reset to
+  // a hardcoded number on every page refresh.
+  useEffect(() => {
+    fetch("/api/stats")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && typeof data.total_records === "number") {
+          seedStats(data);
+        }
+      })
+      .catch(() => {/* fail silently — backend may not be up yet */});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
   // Derive the display slice outside the selector (safe: only runs per render)
   const feed = intelFeed.slice(0, 3);
+
+  // Total KB records = server-side base (persists across refreshes) + session additions
+  const kbCount = baseIndexed + totalIndexed;
 
   if (feed.length === 0) return null;
 
@@ -60,7 +80,7 @@ export function ProactiveIntelFeed() {
         <BrainCircuitIcon className="size-3.5 text-violet-500" />
         <div className="flex flex-col">
           <span className="text-xs font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">
-            {(20 + totalIndexed).toLocaleString()}
+            {kbCount.toLocaleString()}
           </span>
           <span className="text-[9px] text-zinc-400">KB records</span>
         </div>

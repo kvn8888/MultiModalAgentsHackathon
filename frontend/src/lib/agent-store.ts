@@ -85,6 +85,9 @@ interface AgentStore {
   sessionQueryCount: number;
   totalRecordsFetched: number;
   totalRecordsIndexed: number;
+  // Server-side base count (fetched from /api/stats on mount)
+  // Seeded from the backend so the counter doesn't reset to 20 on every refresh
+  baseRecordsIndexed: number;
 
   // Proactive intelligence feed
   intelFeed: IntelEvent[];
@@ -96,6 +99,8 @@ interface AgentStore {
   setProcessing: (v: boolean) => void;
   incrementQueries: () => void;
   addIntelEvent: (event: Omit<IntelEvent, "timestamp">) => void;
+  /** Seed from server-side stats so the counter survives page refreshes */
+  seedStats: (stats: { total_records: number; queries_handled: number }) => void;
   clearSteps: () => void;
   clearSession: () => void;
 }
@@ -109,6 +114,7 @@ export const useAgentStore = create<AgentStore>()((set) => ({
   sessionQueryCount: 0,
   totalRecordsFetched: 0,
   totalRecordsIndexed: 0,
+  baseRecordsIndexed: 0,   // Will be updated by seedStats() on mount
   intelFeed: [
     // Startup seed event — backend ingests 20 permits on boot
     {
@@ -147,6 +153,15 @@ export const useAgentStore = create<AgentStore>()((set) => ({
     set((state) => ({
       intelFeed: [{ ...event, timestamp: Date.now() }, ...state.intelFeed].slice(0, 50),
     })),
+
+  // Seed from the /api/stats backend endpoint so the KB counter reflects
+  // the real server-side count rather than resetting to the hardcoded base on
+  // every page refresh.
+  seedStats: (stats) =>
+    set({
+      baseRecordsIndexed: stats.total_records,
+      sessionQueryCount: stats.queries_handled,
+    }),
 
   clearSteps: () => set({ steps: [] }),
 

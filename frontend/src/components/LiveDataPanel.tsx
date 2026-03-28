@@ -45,6 +45,7 @@ export function LiveDataPanel() {
   const sessionQueryCount = useAgentStore((s) => s.sessionQueryCount);
   const totalRecordsFetched = useAgentStore((s) => s.totalRecordsFetched);
   const totalRecordsIndexed = useAgentStore((s) => s.totalRecordsIndexed);
+  const baseRecordsIndexed = useAgentStore((s) => s.baseRecordsIndexed);
 
   const hasData = permits.length > 0 || violations.length > 0 || steps.length > 0;
 
@@ -65,7 +66,7 @@ export function LiveDataPanel() {
       <div className="grid grid-cols-3 gap-px border-b border-zinc-200 bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-800">
         <StatCell label="Queries" value={sessionQueryCount} />
         <StatCell label="Fetched" value={totalRecordsFetched} />
-        <StatCell label="Indexed" value={totalRecordsIndexed} />
+        <StatCell label="Indexed" value={baseRecordsIndexed + totalRecordsIndexed} />
       </div>
 
       {/* Scrollable content area */}
