@@ -8,7 +8,7 @@ description: >
   LLM sessions never need to re-learn the codebase from scratch.
 metadata:
   author: PermitPulse Team
-  version: "0.2.0"
+  version: "0.3.0"
   hackathon: Multimodal Frontier Hackathon — March 28, 2026
 ---
 
@@ -153,9 +153,13 @@ MultiModalAgentsHackathon/
 ├── frontend/                          # Next.js 16 frontend
 │   ├── src/app/page.tsx               # Main page — branding + chat
 │   ├── src/app/layout.tsx             # Root layout with TooltipProvider
-│   ├── src/app/api/chat/route.ts      # API route proxying to FastAPI backend
-│   ├── src/components/Assistant.tsx    # assistant-ui chat component
-│   ├── src/components/assistant-ui/   # Auto-generated assistant-ui primitives
+│   ├── src/app/api/chat/route.ts      # API route — consumes SSE from backend, emits text+markers
+│   ├── src/lib/agent-store.ts         # Zustand store — global real-time agent state
+│   ├── src/components/Assistant.tsx    # Split-pane layout (chat left, data panel right)
+│   ├── src/components/PermitCard.tsx   # Rich permit card with status badges
+│   ├── src/components/LiveDataPanel.tsx # Right-side panel: stats, activity, permits, violations
+│   ├── src/components/ProactiveIntelFeed.tsx # Header: KB growth counter + intel events
+│   ├── src/components/assistant-ui/   # Auto-generated assistant-ui primitives (thread.tsx heavily modified)
 │   ├── src/components/ui/             # shadcn UI components
 │   ├── package.json                   # Next.js + AI SDK + assistant-ui deps
 │   ├── tsconfig.json                  # TypeScript config
@@ -201,10 +205,17 @@ Frontend runtime key path: the user can paste a Gemini API key into the UI, it i
 | 4 | Senso search integration | ✅ Done | backend/tools/senso.py (search_knowledge, search_full) |
 | 5 | Railtracks agent flow (query) | ✅ Done | backend/agent.py — 4 tool nodes + agent + flow |
 | 6 | Railtracks background ingest flow | ✅ Done | Seed ingest on startup in main.py lifespan + /api/ingest |
-| 7 | FastAPI backend API | ✅ Done | backend/main.py — /api/chat, /api/health, /api/ingest |
-| 8 | assistant-ui frontend | ✅ Done | Next.js 16 + assistant-ui + AI SDK v5 |
+| 7 | FastAPI backend API | ✅ Done | backend/main.py — /api/chat, /api/chat/stream, /api/health, /api/ingest |
+| 8 | assistant-ui frontend | ✅ Done | Next.js 16 + assistant-ui + AI SDK v6 |
 | 9 | DigitalOcean deployment | ✅ Done | Dockerfiles + .do/app.yaml app spec |
-| 10 | Demo video + Devpost submission | 🔲 Not started | |
+| 10 | SSE streaming endpoint | ✅ Done | POST /api/chat/stream — emits step/permits/violations/answer/done events |
+| 11 | Zustand agent store | ✅ Done | frontend/src/lib/agent-store.ts — global real-time state |
+| 12 | Rich permit cards | ✅ Done | PermitCard.tsx — status-colored badges, formatted fields |
+| 13 | Live data panel | ✅ Done | LiveDataPanel.tsx — session stats, activity steps, permit/violation cards |
+| 14 | Proactive intel feed | ✅ Done | ProactiveIntelFeed.tsx — KB growth counter + intel events in header |
+| 15 | Split-pane layout | ✅ Done | Assistant.tsx — chat left, data panel right (380px, responsive) |
+| 16 | Streaming activity trail | ✅ Done | thread.tsx — inline animated steps with marker parsing |
+| 17 | Demo video + Devpost submission | 🔲 Not started | |
 
 ---
 
@@ -232,6 +243,17 @@ Frontend runtime key path: the user can paste a Gemini API key into the UI, it i
   not need its own Gemini call just to echo backend output.
 - **Secret hygiene**: `backend/.env.example` must contain placeholders only.
   Real keys belong in ignored local env files or deployment secrets, never in git.
+- **SSE streaming protocol**: Backend `/api/chat/stream` emits SSE events:
+  `step` (running/complete), `permits` (data array), `violations` (data array),
+  `answer` (text), `done` (close). Route.ts converts these to plain text with
+  embedded `<!-- STEP:{json} -->`, `<!-- PERMITS:[...] -->` markers.
+- **Zustand selector pitfall**: Never call `.slice()`, `.map()`, `.filter()`
+  inside a zustand selector — creates new reference on every render → infinite
+  loop. Derive in the component body instead. Use `useShallow` for object selectors.
+- **State flow**: AssistantMessage parses markers from text stream → pushes to
+  zustand agent-store → LiveDataPanel/ProactiveIntelFeed subscribe → render.
+- **AI SDK v6 (not v5)**: Uses `UIMessage.parts` array, not `content`. The
+  `TextStreamChatTransport` only supports plain text, hence the marker protocol.
 
 ---
 

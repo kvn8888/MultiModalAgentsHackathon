@@ -261,20 +261,173 @@ Same pattern — the AI SDK abstracts the provider, so `streamText()` and `toTex
 
 **Total time for the switch: 10 minutes.** This is the payoff of using provider-agnostic frameworks. If I'd hard-coded OpenAI's API format anywhere, this would have been a multi-hour refactor.
 
+## Step 5: "How Is This Different From a Chatbot?"
+
+This question stopped me cold. I'd built a functional agent — it queried DataSF, ingested into Senso, answered questions accurately. But if you squinted, it looked like ChatGPT with a building permit system prompt. The agent was doing interesting work under the hood, but none of that was **visible** to the user. They saw a text box, a spinner, and an answer. That's a chatbot.
+
+The insight: **an agent's value isn't just in what it does — it's in showing *that* it's doing it.** When a human researcher works, you can see them flipping through tabs, scanning documents, flagging anomalies. An agent should do the same thing, visually.
+
+I identified four features to make the agent's work visible:
+
+1. **Streaming activity steps** — Show each tool invocation as it happens, not after
+2. **Rich permit cards** — Domain-specific data rendering instead of markdown tables
+3. **Live data panel** — A split layout where fetched data lives separately from the conversation
+4. **Proactive intelligence feed** — Background indexing visibility in the header
+
+### The Backend: Server-Sent Events
+
+The original `/api/chat` endpoint did all its work, then returned a single JSON response. The user saw nothing until everything was done. The fix was a new `/api/chat/stream` endpoint that emits Server-Sent Events (SSE) as the agent works:
+
+```python
+def _sse(event_type: str, data: dict | list) -> str:
+    """Format a single SSE frame — the tiny protocol that makes streaming work."""
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+@app.post("/api/chat/stream")
+async def chat_stream(req: ChatRequest):
+    async def generate():
+        # Before each tool call, emit a "running" step
+        yield _sse("step", {"tool": name, "status": "running",
+                            "label": "Fetching live permits from DataSF…"})
+        
+        # Execute the tool
+        result = await tool_fn(args)
+        
+        # After completion, emit structured data + "complete" step
+        yield _sse("permits", permits)
+        yield _sse("step", {"tool": name, "status": "complete", "count": len(permits)})
+        
+        # Finally, stream the LLM's answer
+        yield _sse("answer", {"text": llm_response})
+        yield _sse("done", {})
+    
+    return StreamingResponse(generate(), media_type="text/event-stream")
+```
+
+The event protocol is intentionally simple: `step` (running/complete), `permits` (data array), `violations` (data array), `answer` (text), `done` (close). Each event type maps to a different UI component on the frontend.
+
+### The Transport Problem: Markers in the Text Stream
+
+Here's where it gets tricky. assistant-ui uses `TextStreamChatTransport`, which only supports **plain text** streaming. There's no built-in mechanism for structured side-channel data. But I needed to send both the answer text AND structured permit/step data through the same stream.
+
+My solution: embed structured markers as HTML comments in the text stream, then parse them out on the frontend:
+
+```typescript
+// In route.ts — convert SSE events to a text stream with embedded markers
+if (event === "step") {
+  controller.enqueue(encoder.encode(`<!-- STEP:${JSON.stringify(data)} -->\n`));
+} else if (event === "permits") {
+  controller.enqueue(encoder.encode(`<!-- PERMITS:${JSON.stringify(data)} -->\n`));
+} else if (event === "answer") {
+  controller.enqueue(encoder.encode(data.text));  // Pure text, no marker
+}
+```
+
+The `AssistantMessage` component then parses these markers out of the streaming text, pushes structured data to a zustand store, and renders clean markdown with the markers stripped:
+
+```typescript
+// Regex patterns for extracting markers from the streaming text
+const STEP_MARKER = /<!--\s*STEP:(.*?)-->/g;
+const PERMITS_MARKER = /<!--\s*PERMITS:(.*?)-->/gs;
+
+function AssistantMessage() {
+  const rawText = useAuiState(/* extract text from message parts */);
+  const steps = useMemo(() => parseSteps(rawText), [rawText]);
+  const cleanText = useMemo(() => stripMarkers(rawText), [rawText]);
+  
+  // Push structured data to global store (for the side panel)
+  useEffect(() => {
+    const matches = rawText.matchAll(PERMITS_MARKER);
+    for (const match of matches) {
+      const permits = JSON.parse(match[1]);
+      useAgentStore.getState().addPermits(permits);
+    }
+  }, [rawText]);
+  
+  return (
+    <>
+      {/* Animated activity steps */}
+      {steps.map(step => <StepCard step={step} />)}
+      {/* Clean answer text */}
+      <MarkdownText content={cleanText} />
+    </>
+  );
+}
+```
+
+**Why markers instead of a separate WebSocket?** Two reasons: (1) assistant-ui's transport expects a single text stream, and fighting the framework would create more problems than it solves; (2) HTML comments are invisible if the markers aren't stripped — a safe fallback.
+
+### The Infinite Loop: `zustand` Selector Gotcha
+
+This one's worth a dedicated section because it's a common React trap. I built a `ProactiveIntelFeed` component that subscribes to the agent store:
+
+```typescript
+// BUG: This creates a new array on every render
+const feed = useAgentStore((s) => s.intelFeed.slice(0, 3));
+```
+
+Looks innocent. But `.slice(0, 3)` returns a **new array reference** every time the selector runs. zustand uses `===` reference equality by default to decide whether state changed. New reference → "state changed" → re-render → new selector call → new `.slice()` → new reference → re-render → **infinite loop**.
+
+The error message — `Maximum update depth exceeded` — doesn't point you toward the selector. The stack trace shows `forceStoreRerender → updateStoreInstance`, which is zustand's internal machinery. You have to reason about reference stability to find it.
+
+The fix is simple: move the derivation outside the selector:
+
+```typescript
+// FIXED: Selector returns stable reference, slice happens in render
+const intelFeed = useAgentStore((s) => s.intelFeed);
+const feed = intelFeed.slice(0, 3);
+```
+
+**The rule:** Never call `.map()`, `.filter()`, `.slice()`, or any method that creates a new object/array inside a zustand selector. Either:
+1. Return the raw state and derive in the component body
+2. Use `useShallow` from `zustand/react/shallow` for object equality
+
+This bug cost 20 minutes of debugging, but it's the kind of mistake you only make once.
+
+### The Split Layout
+
+The final piece is a split-pane layout: chat on the left, "LiveDataPanel" on the right. The panel shows three things simultaneously:
+
+1. **Session stats** — queries made, records fetched, records indexed
+2. **Live agent activity** — animated step cards with spinning loaders for running steps
+3. **Permit cards** — styled cards with status-colored badges (issued = emerald, filed = amber, expired = red)
+
+```tsx
+function PermitCard({ permit }: { permit: Permit }) {
+  const statusColor = STATUS_COLORS[permit.status?.toLowerCase() ?? ""] ?? "bg-zinc-100";
+  return (
+    <div className="rounded-lg border border-zinc-200 p-3 bg-white dark:bg-zinc-900">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-xs">{permit.permit_number}</span>
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor}`}>
+          {permit.status?.toUpperCase()}
+        </span>
+      </div>
+      <p className="text-sm font-medium mt-1">{formatAddress(permit)}</p>
+      <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{permit.description}</p>
+    </div>
+  );
+}
+```
+
+The panel is 380px wide on large screens and collapses to a toggle button on smaller ones. The key architecture choice was using zustand as the bridge: `AssistantMessage` (in the chat) parses markers and pushes data to the store, `LiveDataPanel` (in the side panel) subscribes to the same store and renders it independently.
+
+This means the chat shows the conversational answer, and the data panel shows the raw evidence — two different views of the same query, displayed simultaneously.
+
 ## What's Next
 
-PermitPulse is live at [permit-pulse-27i6h.ondigitalocean.app](https://permit-pulse-27i6h.ondigitalocean.app), but there's plenty of room to grow:
+PermitPulse is live at [permit-pulse-27i6h.ondigitalocean.app](https://permit-pulse-27i6h.ondigitalocean.app). The streaming UI transformation is complete, but there's more to do:
 
-- **Conversation memory:** The agent currently treats each message as independent. Adding session-based memory (via Railtracks or Senso) would let users have multi-turn conversations: "What permits are on 123 Main St?" → "Who's the contractor on the most recent one?"
+- **Conversation memory:** The agent currently treats each message as independent. Adding session-based memory would let users have multi-turn conversations: "What permits are on 123 Main St?" → "Who's the contractor on the most recent one?"
 
-- **Proactive monitoring:** Right now the agent is reactive — you ask, it answers. A background job could watch for new violations or permit status changes and push notifications.
-
-- **Richer data display:** assistant-ui supports custom message components. Permit data could render as cards with status badges, maps, and timeline views instead of plain text.
+- **Map visualization:** Permit data includes lat/lng coordinates. Plotting them on a Mapbox layer would turn the data panel into a genuine research tool.
 
 - **SoQL optimization:** The agent currently returns all columns from Socrata. Adding `$select` clauses would reduce token usage significantly and speed up responses.
 
 - **Multi-city expansion:** The Socrata API pattern is used by hundreds of cities. The `_query_socrata()` helper could be parameterized with different `DATASF_BASE_URL` values to support Oakland, Chicago, NYC, etc.
 
+- **Background monitoring:** A cron job that watches for new violations and pushes them to the ProactiveIntelFeed without user queries — turning the agent fully autonomous.
+
 ---
 
-*The most dangerous assumption at a hackathon isn't "this will be hard" — it's "the docs are current." Build against the installed version, not the tutorial version.*
+*An agent that works invisibly is indistinguishable from autocomplete. The moment you show the work — the data flowing, the tools firing, the evidence accumulating — it stops being "just a chatbot" and starts being a tool you can trust.*
