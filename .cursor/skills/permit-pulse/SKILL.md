@@ -51,7 +51,7 @@ underwriters. The US building-permit data market alone serves a $2 T+ industry.
 | Frontend | **assistant-ui** (React) | Chat interface with streaming responses |
 | Deployment | **DigitalOcean** App Platform | Host backend + frontend |
 | Backend framework | **FastAPI** | HTTP API that bridges frontend ↔ Railtracks agent |
-| LLM | Google Gemini 2.0 Flash (via Railtracks) | Agent reasoning |
+| LLM | Google Gemini 3.1 Flash Lite Preview | Agent reasoning |
 | Data source | SF DataSF / Socrata SODA API | Live municipal data |
 
 ### Installed Shipables Skills
@@ -117,7 +117,7 @@ Backend (FastAPI + Railtracks)
   └── External APIs
         ├── DataSF Socrata  (data.sfgov.org)
         ├── Senso Context OS (sdk.senso.ai)
-        └── OpenAI GPT-4o   (via Railtracks LLM)
+        └── Google Gemini 3.1 Flash Lite Preview
 ```
 
 ### Self-Improvement Loop
@@ -222,6 +222,9 @@ MultiModalAgentsHackathon/
   not type-check with latest radix/shadcn. Use `@ts-nocheck` on those files.
 - **assistant-ui pattern**: Scaffold with `npx assistant-ui create`, connect to
   FastAPI backend via AI SDK route handler.
+- **Frontend proxy pattern**: `frontend/src/app/api/chat/route.ts` forwards the
+  latest user message to FastAPI and streams plain text back. The frontend does
+  not need its own Gemini call just to echo backend output.
 - **Secret hygiene**: `backend/.env.example` must contain placeholders only.
   Real keys belong in ignored local env files or deployment secrets, never in git.
 
