@@ -27,6 +27,25 @@ function toTextStreamResponse(text: string) {
   });
 }
 
+function extractUserText(message: any) {
+  if (!message) return "";
+
+  if (typeof message.content === "string") {
+    return message.content;
+  }
+
+  const parts = Array.isArray(message.parts)
+    ? message.parts
+    : Array.isArray(message.content)
+      ? message.content
+      : [];
+
+  return parts
+    .filter((part: { type?: string }) => part?.type === "text")
+    .map((part: { text?: string }) => part.text ?? "")
+    .join("\n");
+}
+
 export async function POST(req: Request) {
   // Parse the incoming request. In production we may see slightly different
   // payload shapes depending on the transport/runtime version.
@@ -55,12 +74,7 @@ export async function POST(req: Request) {
   const userText =
     lastUserMessage == null
       ? fallbackUserText
-      : typeof lastUserMessage.content === "string"
-        ? lastUserMessage.content
-        : lastUserMessage.content
-            .filter((p: { type: string }) => p.type === "text")
-            .map((p: { text: string }) => p.text)
-            .join("\n");
+      : extractUserText(lastUserMessage);
 
   try {
     // Call our FastAPI backend to get the agent's response
