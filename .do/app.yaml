@@ -70,9 +70,6 @@ services:
       - key: BACKEND_URL
         scope: RUN_TIME
         value: ${backend.PRIVATE_URL}
-      - key: GOOGLE_API_KEY
-        scope: RUN_TIME
-        type: SECRET
 
     # This service gets the external (public) URL; backend is internal only.
     routes:

@@ -70,8 +70,9 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     """A user message sent to the PermitPulse agent."""
-    message: str           # The natural-language query
-    session_id: str = ""   # Optional session ID for conversation context
+    message: str              # The natural-language query
+    session_id: str = ""      # Optional session ID for conversation context
+    gemini_api_key: str = ""  # Optional per-request Gemini API key override
 
 
 class ChatResponse(BaseModel):
@@ -118,6 +119,13 @@ async def chat(req: ChatRequest):
 
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    effective_gemini_api_key = req.gemini_api_key.strip() or GEMINI_API_KEY
+    if not effective_gemini_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Gemini API key is missing. Provide one in the UI or set GOOGLE_API_KEY on the backend.",
+        )
 
     # Map tool names to their async handler functions (the Railtracks @rt.function_node funcs)
     tool_handlers = {
@@ -205,7 +213,7 @@ async def chat(req: ChatRequest):
                 messages=messages,
                 tools=tools,
                 tool_choice=current_tool_choice,
-                api_key=GEMINI_API_KEY,
+                api_key=effective_gemini_api_key,
             )
 
             msg = resp.choices[0].message

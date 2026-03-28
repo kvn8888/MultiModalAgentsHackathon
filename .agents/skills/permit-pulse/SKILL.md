@@ -179,11 +179,13 @@ MultiModalAgentsHackathon/
 
 | Variable | Purpose | Where |
 |---|---|---|
-| `GOOGLE_API_KEY` | LLM calls via Railtracks + AI SDK | backend `.env` + frontend |
+| `GOOGLE_API_KEY` | Backend fallback Gemini key for server-side requests | backend `.env` / DO backend secret |
 | `SENSO_API_KEY` | Senso Context OS auth | backend `.env` |
 | `SENSO_ORG_ID` | Senso organization ID | backend `.env` |
 | `DATASF_APP_TOKEN` | (optional) higher Socrata rate limits | backend `.env` |
 | `BACKEND_URL` | Python backend URL for API proxy | frontend (set by DO via `${backend.PRIVATE_URL}`) |
+
+Frontend runtime key path: the user can paste a Gemini API key into the UI, it is stored in browser localStorage, sent with each chat request, and used by the backend as a per-request override.
 
 ---
 

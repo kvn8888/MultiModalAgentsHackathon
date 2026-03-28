@@ -70,6 +70,13 @@ export async function POST(req: Request) {
     return new Response("No user message found", { status: 400 });
   }
 
+  const geminiApiKey =
+    typeof payload?.geminiApiKey === "string"
+      ? payload.geminiApiKey
+      : typeof payload?.gemini_api_key === "string"
+        ? payload.gemini_api_key
+        : "";
+
   // Get the text content from the message (handles both string and array formats)
   const userText =
     lastUserMessage == null
@@ -81,7 +88,10 @@ export async function POST(req: Request) {
     const backendResponse = await fetch(`${BACKEND_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: userText }),
+      body: JSON.stringify({
+        message: userText,
+        gemini_api_key: geminiApiKey,
+      }),
     });
 
     if (!backendResponse.ok) {
