@@ -137,6 +137,16 @@ Backend (FastAPI + Railtracks)
 ```
 MultiModalAgentsHackathon/
 ├── README.md                          # Project overview
+├── backend/                           # Python backend
+│   ├── main.py                        # FastAPI app — routes, lifespan, CORS
+│   ├── agent.py                       # Railtracks agent + flow definition
+│   ├── config.py                      # Environment variables + constants
+│   ├── requirements.txt               # Python dependencies
+│   ├── .env.example                   # Template for env vars
+│   └── tools/                         # Tool implementations
+│       ├── __init__.py
+│       ├── datasf.py                  # DataSF Socrata API client (permits, violations, etc.)
+│       └── senso.py                   # Senso CLI wrapper (ingest + search)
 ├── .claude/skills/                    # Claude Code skills
 │   ├── permit-pulse/SKILL.md          # ← YOU ARE HERE (project memory)
 │   ├── railtracks/                    # Railtracks skill (shipables)
@@ -150,8 +160,7 @@ MultiModalAgentsHackathon/
 └── .vscode/                           # VS Code settings
 ```
 
-> Backend (`backend/`), frontend (`frontend/`), and infra files will appear
-> here as they are scaffolded.
+> Frontend (`frontend/`) and infra files will appear here as they are scaffolded.
 
 ---
 
@@ -173,12 +182,12 @@ MultiModalAgentsHackathon/
 | # | Feature | Status | Notes |
 |---|---|---|---|
 | 1 | Project scaffolding + sponsor skills installed | ✅ Done | Railtracks, Senso, assistant-ui |
-| 2 | DataSF fetcher tools (permits, violations, contacts) | 🔲 Not started | |
-| 3 | Senso ingestion pipeline | 🔲 Not started | |
-| 4 | Senso search integration | 🔲 Not started | |
-| 5 | Railtracks agent flow (query) | 🔲 Not started | |
-| 6 | Railtracks background ingest flow | 🔲 Not started | |
-| 7 | FastAPI backend API | 🔲 Not started | |
+| 2 | DataSF fetcher tools (permits, violations, contacts) | ✅ Done | backend/tools/datasf.py |
+| 3 | Senso ingestion pipeline | ✅ Done | backend/tools/senso.py (ingest_permits, ingest_violations) |
+| 4 | Senso search integration | ✅ Done | backend/tools/senso.py (search_knowledge, search_full) |
+| 5 | Railtracks agent flow (query) | ✅ Done | backend/agent.py — 4 tool nodes + agent + flow |
+| 6 | Railtracks background ingest flow | ✅ Done | Seed ingest on startup in main.py lifespan + /api/ingest |
+| 7 | FastAPI backend API | ✅ Done | backend/main.py — /api/chat, /api/health, /api/ingest |
 | 8 | assistant-ui frontend | 🔲 Not started | |
 | 9 | DigitalOcean deployment | 🔲 Not started | |
 | 10 | Demo video + Devpost submission | 🔲 Not started | |
