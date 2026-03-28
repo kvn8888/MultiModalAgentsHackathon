@@ -222,6 +222,8 @@ MultiModalAgentsHackathon/
   not type-check with latest radix/shadcn. Use `@ts-nocheck` on those files.
 - **assistant-ui pattern**: Scaffold with `npx assistant-ui create`, connect to
   FastAPI backend via AI SDK route handler.
+- **Secret hygiene**: `backend/.env.example` must contain placeholders only.
+  Real keys belong in ignored local env files or deployment secrets, never in git.
 
 ---
 
