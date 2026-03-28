@@ -36,25 +36,11 @@ import {
   RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
-import type { FC } from "react";
+import { type FC, useMemo } from "react";
 
 // ── Activity parsing ─────────────────────────────────────────────────────────
 
 const ACTIVITY_SENTINEL = "<!-- PERMITPULSE_ACTIVITY:";
-
-function extractActivity(text: string): ActivityStep[] | null {
-  const start = text.indexOf(ACTIVITY_SENTINEL);
-  if (start === -1) return null;
-  const jsonStart = start + ACTIVITY_SENTINEL.length;
-  const end = text.indexOf(" -->", jsonStart);
-  if (end === -1) return null;
-  try {
-    const data = JSON.parse(text.slice(jsonStart, end));
-    return Array.isArray(data.steps) ? data.steps : null;
-  } catch {
-    return null;
-  }
-}
 
 // ── Domain suggestions ───────────────────────────────────────────────────────
 
@@ -163,8 +149,10 @@ const PermitSuggestionButton: FC<{
   return (
     <button
       onClick={() => {
-        runtime.composer.setText(prompt);
-        runtime.composer.send();
+        runtime.append({
+          role: "user",
+          content: [{ type: "text", text: prompt }],
+        });
       }}
       className="fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-200 h-auto w-full flex-col items-start justify-start gap-1 rounded-3xl border bg-background px-4 py-3 text-left text-sm transition-colors hover:bg-muted flex"
     >
@@ -213,16 +201,33 @@ const MessageError: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
-  // Extract the activity sentinel embedded at the end of the reply text
-  const activity = useAuiState((s: any) => {
+  // Return the raw JSON string (a primitive) to avoid returning a new array
+  // reference on every render, which would cause an infinite re-render loop.
+  const activityJson = useAuiState((s: any) => {
     const content = s.message.content;
     if (!Array.isArray(content)) return null;
     const text = content
       .filter((p: any) => p.type === "text")
       .map((p: any) => p.text ?? "")
       .join("");
-    return extractActivity(text);
+    const start = text.indexOf(ACTIVITY_SENTINEL);
+    if (start === -1) return null;
+    const jsonStart = start + ACTIVITY_SENTINEL.length;
+    const end = text.indexOf(" -->", jsonStart);
+    if (end === -1) return null;
+    return text.slice(jsonStart, end); // stable primitive — only changes when text changes
   });
+
+  // Parse the JSON string outside the selector so we get a stable array reference
+  const activity = useMemo(() => {
+    if (!activityJson) return null;
+    try {
+      const data = JSON.parse(activityJson);
+      return Array.isArray(data.steps) ? (data.steps as ActivityStep[]) : null;
+    } catch {
+      return null;
+    }
+  }, [activityJson]);
 
   return (
     <MessagePrimitive.Root
