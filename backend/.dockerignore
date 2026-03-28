@@ -1,0 +1,20 @@
+# Backend .dockerignore — exclude files not needed in the Docker build context
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.git/
+.github/
+.vscode/
+.claude/
+.cursor/
+.agents/
+*.md
+!README.md

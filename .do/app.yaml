@@ -1,0 +1,76 @@
+# PermitPulse — DigitalOcean App Platform Spec
+# Deploy with:  doctl apps create --spec .do/app.yaml
+# Update with:  doctl apps update <app-id> --spec .do/app.yaml
+#
+# This defines two services:
+#   1. backend  — Python FastAPI (Railtracks agent + DataSF + Senso)
+#   2. frontend — Next.js (assistant-ui chat interface)
+#
+# The frontend's API route proxies /api/chat to the backend's internal URL.
+
+name: permit-pulse
+region: sfo   # San Francisco — closest to DataSF data source
+
+services:
+  # -----------------------------------------------------------------------
+  # Backend — Python FastAPI + Railtracks Agent
+  # -----------------------------------------------------------------------
+  - name: backend
+    # Build from the backend/ directory using its Dockerfile
+    dockerfile_path: backend/Dockerfile
+    source_dir: /backend
+    github:
+      repo: kvn8888/MultiModalAgentsHackathon
+      branch: main
+      deploy_on_push: true
+
+    # DigitalOcean injects $PORT; our Dockerfile uses it
+    http_port: 8000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb   # Starter tier — sufficient for hackathon
+
+    # Health check endpoint
+    health_check:
+      http_path: /api/health
+
+    # Environment variables — set these in the DO dashboard or via doctl
+    envs:
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: SENSO_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: DATASF_APP_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+      # Internal routing: not needed since frontend uses relative /api/chat
+
+  # -----------------------------------------------------------------------
+  # Frontend — Next.js + assistant-ui
+  # -----------------------------------------------------------------------
+  - name: frontend
+    dockerfile_path: frontend/Dockerfile
+    source_dir: /frontend
+    github:
+      repo: kvn8888/MultiModalAgentsHackathon
+      branch: main
+      deploy_on_push: true
+
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb   # Frontend is lightweight
+
+    # Tell the frontend where to find the backend.
+    # In DO App Platform, services can reference each other with ${service.INTERNAL_URL}
+    envs:
+      - key: BACKEND_URL
+        scope: RUN_TIME
+        value: ${backend.PRIVATE_URL}
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+
+    # This service gets the external (public) URL; backend is internal only.
+    routes:
+      - path: /

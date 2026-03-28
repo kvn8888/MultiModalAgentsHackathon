@@ -1,0 +1,14 @@
+# Frontend .dockerignore — exclude files not needed in the Docker build context
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+.git/
+.github/
+.vscode/
+.claude/
+.cursor/
+.agents/
+*.md
+!README.md

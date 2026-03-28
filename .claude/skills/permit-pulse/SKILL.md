@@ -166,7 +166,10 @@ MultiModalAgentsHackathon/
 │   ├── src/components/assistant-ui/   # Auto-generated assistant-ui primitives
 │   ├── src/components/ui/             # shadcn UI components
 │   ├── package.json                   # Next.js + AI SDK + assistant-ui deps
-│   └── tsconfig.json                  # TypeScript config
+│   ├── tsconfig.json                  # TypeScript config
+│   └── Dockerfile                     # Multi-stage Docker build (standalone)
+├── .do/
+│   └── app.yaml                       # DigitalOcean App Platform deployment spec
 ```
 
 ---
@@ -196,7 +199,7 @@ MultiModalAgentsHackathon/
 | 6 | Railtracks background ingest flow | ✅ Done | Seed ingest on startup in main.py lifespan + /api/ingest |
 | 7 | FastAPI backend API | ✅ Done | backend/main.py — /api/chat, /api/health, /api/ingest |
 | 8 | assistant-ui frontend | ✅ Done | Next.js 16 + assistant-ui + AI SDK v5 |
-| 9 | DigitalOcean deployment | 🔲 Not started | |
+| 9 | DigitalOcean deployment | ✅ Done | Dockerfiles + .do/app.yaml app spec |
 | 10 | Demo video + Devpost submission | 🔲 Not started | |
 
 ---
@@ -236,6 +239,13 @@ cd backend && uvicorn main:app --reload
 
 # (future) Run frontend
 cd frontend && npm run dev
+
+# Deploy to DigitalOcean
+doctl apps create --spec .do/app.yaml
+
+# Build Docker images locally
+cd backend && docker build -t permitpulse-backend .
+cd frontend && docker build -t permitpulse-frontend .
 ```
 
 ---
