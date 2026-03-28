@@ -22,6 +22,7 @@ from tools import datasf, senso
 # ── Make sure the Gemini key is available to railtracks ──────────────────────
 import os
 os.environ["GOOGLE_API_KEY"] = GEMINI_API_KEY
+os.environ["GEMINI_API_KEY"] = GEMINI_API_KEY
 
 
 # ── Tool Nodes ───────────────────────────────────────────────────────────────
@@ -228,7 +229,7 @@ When a user asks a question:
 """
 
 # Create the LLM instance — Railtracks wraps Google's Gemini API
-llm = GeminiLLM("gemini-2.0-flash")
+llm = GeminiLLM("gemini-3.1-flash-lite-preview", api_key=GEMINI_API_KEY)
 
 # Build the agent node with all tools attached
 permit_agent = rt.agent_node(

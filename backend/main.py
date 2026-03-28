@@ -16,8 +16,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import CORS_ORIGINS, PORT
-from agent import query_flow
+from config import CORS_ORIGINS, PORT, GEMINI_API_KEY
+from agent import query_flow, SYSTEM_MESSAGE, tool_fetch_permits, tool_fetch_violations, tool_search_knowledge, tool_fetch_permit_details
 from tools import datasf, senso
 
 
@@ -107,23 +107,142 @@ async def chat(req: ChatRequest):
     """
     Send a message to the PermitPulse agent and get a response.
 
-    The agent will:
-      1. Search the Senso knowledge base for existing context.
-      2. Fetch fresh data from DataSF if needed.
-      3. Ingest new data into Senso (self-improvement).
-      4. Synthesize a natural-language answer.
+    Uses litellm directly with tool_choice so Gemini makes structured
+    function calls. Railtracks tool nodes are called for the actual
+    data fetching — we just bypass Railtracks' agent loop which doesn't
+    set tool_choice for Gemini.
     """
+    import asyncio
+    import json
+    import litellm
+
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+    # Map tool names to their async handler functions (the Railtracks @rt.function_node funcs)
+    tool_handlers = {
+        "tool_fetch_permits": tool_fetch_permits,
+        "tool_fetch_violations": tool_fetch_violations,
+        "tool_search_knowledge": tool_search_knowledge,
+        "tool_fetch_permit_details": tool_fetch_permit_details,
+    }
+
+    # Define tools in litellm/OpenAI format for Gemini
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "tool_fetch_permits",
+                "description": "Fetch building permits from SF DataSF. Use JSON query_params with keys like where, address_number, address_street, neighborhood, district, limit.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query_params": {"type": "string", "description": "JSON string with filter keys: where, address_number, address_street, neighborhood, district, limit"}
+                    },
+                    "required": ["query_params"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "tool_fetch_violations",
+                "description": "Fetch code violations and DBI complaints. Use JSON query_params with keys like block, lot, complaint_number, where, limit.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query_params": {"type": "string", "description": "JSON string with filter keys: block, lot, complaint_number, where, limit"}
+                    },
+                    "required": ["query_params"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "tool_search_knowledge",
+                "description": "Search the Senso knowledge base for previously ingested permit/violation data.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Natural-language search query"}
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "tool_fetch_permit_details",
+                "description": "Fetch detailed info about a specific permit including contacts and routing.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "permit_number": {"type": "string", "description": "The permit number to look up"}
+                    },
+                    "required": ["permit_number"],
+                },
+            },
+        },
+    ]
+
+    # Build the message history
+    messages = [
+        {"role": "system", "content": SYSTEM_MESSAGE},
+        {"role": "user", "content": req.message},
+    ]
+
     try:
-        # Invoke the Railtracks flow — this runs the full agent pipeline
-        result = query_flow.invoke(req.message)
+        # Tool call loop — keep calling until we get a text response (max 5 rounds)
+        for round_num in range(5):
+            # First round: force tool use. Later rounds: let model decide.
+            current_tool_choice = "required" if round_num == 0 else "auto"
+            
+            resp = await asyncio.to_thread(
+                litellm.completion,
+                model="gemini/gemini-3.1-flash-lite-preview",
+                messages=messages,
+                tools=tools,
+                tool_choice=current_tool_choice,
+                api_key=GEMINI_API_KEY,
+            )
 
-        # Railtracks returns the final agent output as a string
-        reply = str(result) if result else "I couldn't find relevant information for your query."
+            msg = resp.choices[0].message
 
-        return ChatResponse(reply=reply, session_id=req.session_id)
+            # If the model made tool calls, execute them and loop
+            if msg.tool_calls:
+                # Add the assistant's tool-call message to history
+                messages.append(msg.model_dump())
+
+                for tc in msg.tool_calls:
+                    fn_name = tc.function.name
+                    fn_args = json.loads(tc.function.arguments)
+
+                    handler = tool_handlers.get(fn_name)
+                    if handler:
+                        # Call the Railtracks @rt.function_node function directly
+                        # @rt.function_node preserves the original async callable
+                        result = await handler(**fn_args)
+                    else:
+                        result = json.dumps({"error": f"Unknown tool: {fn_name}"})
+
+                    # Add tool result to message history
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": str(result),
+                    })
+            else:
+                # No tool calls — we have a final text response
+                reply = msg.content or "I couldn't find relevant information for your query."
+                return ChatResponse(reply=reply, session_id=req.session_id)
+
+        # If we hit max rounds, return whatever we have
+        return ChatResponse(
+            reply="I ran out of processing steps. Please try a more specific question.",
+            session_id=req.session_id,
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")

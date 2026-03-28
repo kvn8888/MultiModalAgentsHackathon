@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     // that assistant-ui can consume. We use a system message with the
     // pre-computed answer so the LLM just echoes it back.
     const result = streamText({
-      model: google("gemini-2.0-flash"),
+      model: google("gemini-3.1-flash-lite-preview"),
       messages: [
         {
           role: "system",
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
 
     // Return a streaming error message so assistant-ui can display it
     const result = streamText({
-      model: google("gemini-2.0-flash"),
+      model: google("gemini-3.1-flash-lite-preview"),
       messages: [
         {
           role: "system",
