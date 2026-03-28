@@ -38,7 +38,7 @@ services:
 
     # Environment variables — set these in the DO dashboard or via doctl
     envs:
-      - key: OPENAI_API_KEY
+      - key: GOOGLE_API_KEY
         scope: RUN_TIME
         type: SECRET
       - key: SENSO_API_KEY
@@ -70,7 +70,7 @@ services:
       - key: BACKEND_URL
         scope: RUN_TIME
         value: ${backend.PRIVATE_URL}
-      - key: OPENAI_API_KEY
+      - key: GOOGLE_API_KEY
         scope: RUN_TIME
         type: SECRET
 

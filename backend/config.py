@@ -13,8 +13,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── LLM ──────────────────────────────────────────────────────────────────────
-# OpenAI key consumed by Railtracks when creating an OpenAILLM instance.
-OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+# Google Gemini API key consumed by Railtracks when creating a GeminiLLM instance.
+GEMINI_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
 
 # ── Senso.ai ─────────────────────────────────────────────────────────────────
 # API key for the Senso CLI (ingest + search).  Must be set before calling

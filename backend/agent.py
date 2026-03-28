@@ -13,15 +13,15 @@ Railtracks pattern:
 
 import json
 import railtracks as rt
-from railtracks.llm import OpenAILLM
-from config import OPENAI_API_KEY
+from railtracks.llm import GeminiLLM
+from config import GEMINI_API_KEY
 
 # Import the actual data-fetching and knowledge functions
 from tools import datasf, senso
 
-# ── Make sure the OpenAI key is available to railtracks ──────────────────────
+# ── Make sure the Gemini key is available to railtracks ──────────────────────
 import os
-os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+os.environ["GOOGLE_API_KEY"] = GEMINI_API_KEY
 
 
 # ── Tool Nodes ───────────────────────────────────────────────────────────────
@@ -227,8 +227,8 @@ When a user asks a question:
 - Addresses in DataSF are uppercase (e.g. "MAIN" not "Main").
 """
 
-# Create the LLM instance — Railtracks wraps OpenAI's API
-llm = OpenAILLM("gpt-4o")
+# Create the LLM instance — Railtracks wraps Google's Gemini API
+llm = GeminiLLM("gemini-2.0-flash")
 
 # Build the agent node with all tools attached
 permit_agent = rt.agent_node(

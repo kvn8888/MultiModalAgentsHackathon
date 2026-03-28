@@ -51,7 +51,7 @@ underwriters. The US building-permit data market alone serves a $2 T+ industry.
 | Frontend | **assistant-ui** (React) | Chat interface with streaming responses |
 | Deployment | **DigitalOcean** App Platform | Host backend + frontend |
 | Backend framework | **FastAPI** | HTTP API that bridges frontend ↔ Railtracks agent |
-| LLM | OpenAI GPT-4o (via Railtracks) | Agent reasoning |
+| LLM | Google Gemini 2.0 Flash (via Railtracks) | Agent reasoning |
 | Data source | SF DataSF / Socrata SODA API | Live municipal data |
 
 ### Installed Shipables Skills
@@ -179,12 +179,11 @@ MultiModalAgentsHackathon/
 
 | Variable | Purpose | Where |
 |---|---|---|
-| `OPENAI_API_KEY` | LLM calls via Railtracks | backend `.env` |
+| `GOOGLE_API_KEY` | LLM calls via Railtracks + AI SDK | backend `.env` + frontend |
 | `SENSO_API_KEY` | Senso Context OS auth | backend `.env` |
 | `SENSO_ORG_ID` | Senso organization ID | backend `.env` |
 | `DATASF_APP_TOKEN` | (optional) higher Socrata rate limits | backend `.env` |
 | `BACKEND_URL` | Python backend URL for API proxy | frontend (set by DO via `${backend.PRIVATE_URL}`) |
-| `OPENAI_API_KEY` | AI SDK streaming (proxy route) | frontend `.env.local` or DO secret |
 
 ---
 

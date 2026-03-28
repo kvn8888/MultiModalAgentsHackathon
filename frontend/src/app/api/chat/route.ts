@@ -11,7 +11,7 @@
  * FastAPI backend, so assistant-ui gets a proper streaming experience.
  */
 
-import { openai } from "@ai-sdk/openai";
+import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
 
 // Allow up to 60 seconds for the agent to think + fetch data
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     // that assistant-ui can consume. We use a system message with the
     // pre-computed answer so the LLM just echoes it back.
     const result = streamText({
-      model: openai("gpt-4o-mini"),
+      model: google("gemini-2.0-flash"),
       messages: [
         {
           role: "system",
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
 
     // Return a streaming error message so assistant-ui can display it
     const result = streamText({
-      model: openai("gpt-4o-mini"),
+      model: google("gemini-2.0-flash"),
       messages: [
         {
           role: "system",
