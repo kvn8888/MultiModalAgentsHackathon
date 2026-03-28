@@ -7,6 +7,7 @@
  */
 
 import { Assistant } from "@/components/Assistant";
+import { KBCounter } from "@/components/KBCounter";
 
 export default function Home() {
   return (
@@ -28,10 +29,11 @@ export default function Home() {
             </p>
           </div>
         </div>
-        {/* Subtle status indicator */}
+        {/* Status indicators */}
         <div className="flex items-center gap-2 text-xs text-zinc-400">
           <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-          Live — DataSF connected
+          <span>Live — DataSF connected</span>
+          <KBCounter />
         </div>
       </header>
 

@@ -20,7 +20,12 @@
       "Bash(xargs kill:*)",
       "Bash(curl -s \"http://localhost:8000/api/investigate?q=Salesforce%20Tower\")",
       "Bash(curl -v -N \"http://localhost:8000/api/investigate?q=Salesforce%20Tower\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8000/api/investigate?q=test\")"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8000/api/investigate?q=test\")",
+      "Read(//Volumes/DevDisk/**)",
+      "Bash(grep -rn messages*: /Volumes/DevDisk/Dev Projects/MultiModalAgentsHackathon/frontend/node_modules/@assistant-ui/react/dist/primitives/)",
+      "Bash(node -e \"const p = require\\(''''/Volumes/DevDisk/Dev\\\\ Projects/MultiModalAgentsHackathon/frontend/node_modules/remark-gfm/package.json''''\\); console.log\\(p.version, p.main, p.exports\\)\")",
+      "Bash(python3 -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\(p[''''version'''']\\)\")",
+      "Bash(python3 -c \"import sys,json; p=json.load\\(sys.stdin\\); print\\(''''version:'''', p.get\\(''''version''''\\)\\); print\\(''''peerDeps:'''', p.get\\(''''peerDependencies'''', {}\\)\\)\")"
     ]
   }
 }

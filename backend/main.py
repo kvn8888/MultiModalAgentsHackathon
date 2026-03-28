@@ -202,11 +202,13 @@ async def chat(req: ChatRequest):
     ]
 
     try:
+        tool_activity = []
+
         # Tool call loop — keep calling until we get a text response (max 5 rounds)
         for round_num in range(5):
             # First round: force tool use. Later rounds: let model decide.
             current_tool_choice = "required" if round_num == 0 else "auto"
-            
+
             resp = await asyncio.to_thread(
                 litellm.completion,
                 model="gemini/gemini-3.1-flash-lite-preview",
@@ -238,6 +240,35 @@ async def chat(req: ChatRequest):
                     else:
                         result = json.dumps({"error": f"Unknown tool: {fn_name}"})
 
+                    # Track activity for frontend display
+                    try:
+                        result_data = json.loads(result) if isinstance(result, str) else {}
+                    except Exception:
+                        result_data = {}
+
+                    entry: dict = {"tool": fn_name, "status": "complete"}
+                    if fn_name == "tool_fetch_permits":
+                        count = result_data.get("count", 0)
+                        entry["label"] = "Fetched live permits from DataSF"
+                        entry["count"] = count
+                        entry["indexed"] = count
+                    elif fn_name == "tool_search_knowledge":
+                        results = result_data.get("results", [])
+                        entry["label"] = "Searched knowledge base"
+                        entry["count"] = len(results)
+                    elif fn_name == "tool_fetch_violations":
+                        entry["label"] = "Checked violation database"
+                        entry["count"] = result_data.get("violations_count", 0)
+                        red_flags = result_data.get("red_flags", [])
+                        if red_flags:
+                            entry["red_flags"] = len(red_flags)
+                    elif fn_name == "tool_fetch_permit_details":
+                        entry["label"] = "Loaded permit details"
+                        entry["count"] = 1 if result_data.get("permit") else 0
+                    else:
+                        entry["label"] = fn_name.replace("tool_", "").replace("_", " ").title()
+                    tool_activity.append(entry)
+
                     # Add tool result to message history
                     messages.append({
                         "role": "tool",
@@ -247,7 +278,10 @@ async def chat(req: ChatRequest):
             else:
                 # No tool calls — we have a final text response
                 reply = msg.content or "I couldn't find relevant information for your query."
-                return ChatResponse(reply=reply, session_id=req.session_id)
+                # Append activity sentinel (invisible HTML comment, parsed by frontend)
+                activity_json = json.dumps({"steps": tool_activity})
+                full_reply = f"{reply}\n\n<!-- PERMITPULSE_ACTIVITY:{activity_json} -->"
+                return ChatResponse(reply=full_reply, session_id=req.session_id)
 
         # If we hit max rounds, return whatever we have
         return ChatResponse(

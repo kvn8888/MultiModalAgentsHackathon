@@ -7,6 +7,7 @@ import {
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { ActivityTrail, type ActivityStep } from "@/components/ActivityTrail";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +21,7 @@ import {
   SuggestionPrimitive,
   ThreadPrimitive,
   useAuiState,
+  useThreadRuntime,
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
@@ -35,6 +37,49 @@ import {
   SquareIcon,
 } from "lucide-react";
 import type { FC } from "react";
+
+// ── Activity parsing ─────────────────────────────────────────────────────────
+
+const ACTIVITY_SENTINEL = "<!-- PERMITPULSE_ACTIVITY:";
+
+function extractActivity(text: string): ActivityStep[] | null {
+  const start = text.indexOf(ACTIVITY_SENTINEL);
+  if (start === -1) return null;
+  const jsonStart = start + ACTIVITY_SENTINEL.length;
+  const end = text.indexOf(" -->", jsonStart);
+  if (end === -1) return null;
+  try {
+    const data = JSON.parse(text.slice(jsonStart, end));
+    return Array.isArray(data.steps) ? data.steps : null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Domain suggestions ───────────────────────────────────────────────────────
+
+const PERMIT_SUGGESTIONS = [
+  {
+    title: "Mission district permits",
+    description: "Recent filings and activity",
+    prompt: "What building permits have been filed in the Mission district recently?",
+  },
+  {
+    title: "Red flags near Valencia St",
+    description: "Violations and unsafe notices",
+    prompt: "Show me active violations and red flags near 450 Valencia St",
+  },
+  {
+    title: "Highest-value permits",
+    description: "Big construction projects",
+    prompt: "What are the highest-value building permits filed in SF this year?",
+  },
+  {
+    title: "District 6 approval times",
+    description: "Regulatory speed analysis",
+    prompt: "What's the average permit approval time in Supervisor District 6?",
+  },
+];
 
 export const Thread: FC = () => {
   return (
@@ -87,10 +132,10 @@ const ThreadWelcome: FC = () => {
       <div className="aui-thread-welcome-center flex w-full grow flex-col items-center justify-center">
         <div className="aui-thread-welcome-message flex size-full flex-col justify-center px-4">
           <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both font-semibold text-2xl duration-200">
-            Hello there!
+            What's happening in SF?
           </h1>
           <p className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-muted-foreground text-xl delay-75 duration-200">
-            How can I help you today?
+            Ask about permits, violations, or regulatory risk — I'll fetch live data and grow smarter with each query.
           </p>
         </div>
       </div>
@@ -101,19 +146,31 @@ const ThreadWelcome: FC = () => {
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions grid w-full @md:grid-cols-2 gap-2 pb-4">
-      <ThreadPrimitive.Suggestions>
-        {() => <ThreadSuggestionItem />}
-      </ThreadPrimitive.Suggestions>
+    <div className="grid w-full @md:grid-cols-2 gap-2 pb-4">
+      {PERMIT_SUGGESTIONS.map((s, i) => (
+        <PermitSuggestionButton key={i} {...s} />
+      ))}
     </div>
   );
 };
 
-const ThreadSuggestionItem: FC = () => {
+const PermitSuggestionButton: FC<{
+  title: string;
+  description: string;
+  prompt: string;
+}> = ({ title, description, prompt }) => {
+  const runtime = useThreadRuntime();
   return (
-    <div className="aui-thread-welcome-suggestion-display fade-in slide-in-from-bottom-2 @md:nth-[n+3]:block nth-[n+3]:hidden animate-in fill-mode-both duration-200">
-      <SuggestionPrimitive.Trigger send render={<Button variant="ghost" className="aui-thread-welcome-suggestion h-auto w-full @md:flex-col flex-wrap items-start justify-start gap-1 rounded-3xl border bg-background px-4 py-3 text-left text-sm transition-colors hover:bg-muted" />}><SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1 font-medium" /><SuggestionPrimitive.Description className="aui-thread-welcome-suggestion-text-2 text-muted-foreground empty:hidden" /></SuggestionPrimitive.Trigger>
-    </div>
+    <button
+      onClick={() => {
+        runtime.composer.setText(prompt);
+        runtime.composer.send();
+      }}
+      className="fade-in slide-in-from-bottom-2 animate-in fill-mode-both duration-200 h-auto w-full flex-col items-start justify-start gap-1 rounded-3xl border bg-background px-4 py-3 text-left text-sm transition-colors hover:bg-muted flex"
+    >
+      <span className="font-medium">{title}</span>
+      <span className="text-muted-foreground text-xs">{description}</span>
+    </button>
   );
 };
 
@@ -134,7 +191,7 @@ const Composer: FC = () => {
 const ComposerAction: FC = () => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
+      <div />
       <AuiIf condition={(s) => !s.thread.isRunning}>
         <ComposerPrimitive.Send render={<TooltipIconButton tooltip="Send message" side="bottom" type="button" variant="default" size="icon" className="aui-composer-send size-8 rounded-full" aria-label="Send message" />}><ArrowUpIcon className="aui-composer-send-icon size-4" /></ComposerPrimitive.Send>
       </AuiIf>
@@ -156,12 +213,24 @@ const MessageError: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
+  // Extract the activity sentinel embedded at the end of the reply text
+  const activity = useAuiState((s: any) => {
+    const content = s.message.content;
+    if (!Array.isArray(content)) return null;
+    const text = content
+      .filter((p: any) => p.type === "text")
+      .map((p: any) => p.text ?? "")
+      .join("");
+    return extractActivity(text);
+  });
+
   return (
     <MessagePrimitive.Root
       className="aui-assistant-message-root fade-in slide-in-from-bottom-1 relative mx-auto w-full max-w-(--thread-max-width) animate-in py-3 duration-150"
       data-role="assistant"
     >
       <div className="aui-assistant-message-content wrap-break-word px-2 text-foreground leading-relaxed">
+        {activity && <ActivityTrail steps={activity} />}
         <MessagePrimitive.Parts>
           {({ part }) => {
             if (part.type === "text") return <MarkdownText />;
