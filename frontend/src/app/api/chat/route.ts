@@ -28,26 +28,39 @@ function toTextStreamResponse(text: string) {
 }
 
 export async function POST(req: Request) {
-  // Parse the incoming AI SDK request — contains the full message history
-  const { messages } = await req.json();
+  // Parse the incoming request. In production we may see slightly different
+  // payload shapes depending on the transport/runtime version.
+  const payload = await req.json();
+  const messages = Array.isArray(payload?.messages) ? payload.messages : [];
 
   // Extract the latest user message to send to our Python agent
   const lastUserMessage = messages
     .filter((m: { role: string }) => m.role === "user")
     .pop();
 
-  if (!lastUserMessage) {
+  const fallbackUserText =
+    typeof payload?.message === "string"
+      ? payload.message
+      : typeof payload?.prompt === "string"
+        ? payload.prompt
+        : typeof payload?.input === "string"
+          ? payload.input
+          : "";
+
+  if (!lastUserMessage && !fallbackUserText.trim()) {
     return new Response("No user message found", { status: 400 });
   }
 
   // Get the text content from the message (handles both string and array formats)
   const userText =
-    typeof lastUserMessage.content === "string"
-      ? lastUserMessage.content
-      : lastUserMessage.content
-          .filter((p: { type: string }) => p.type === "text")
-          .map((p: { text: string }) => p.text)
-          .join("\n");
+    lastUserMessage == null
+      ? fallbackUserText
+      : typeof lastUserMessage.content === "string"
+        ? lastUserMessage.content
+        : lastUserMessage.content
+            .filter((p: { type: string }) => p.type === "text")
+            .map((p: { text: string }) => p.text)
+            .join("\n");
 
   try {
     // Call our FastAPI backend to get the agent's response
