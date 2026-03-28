@@ -158,9 +158,16 @@ MultiModalAgentsHackathon/
 ├── .agents/skills/                    # Codex / Copilot / Gemini skills
 ├── .github/                           # GitHub config
 └── .vscode/                           # VS Code settings
+├── frontend/                          # Next.js 16 frontend
+│   ├── src/app/page.tsx               # Main page — branding + chat
+│   ├── src/app/layout.tsx             # Root layout with TooltipProvider
+│   ├── src/app/api/chat/route.ts      # API route proxying to FastAPI backend
+│   ├── src/components/Assistant.tsx    # assistant-ui chat component
+│   ├── src/components/assistant-ui/   # Auto-generated assistant-ui primitives
+│   ├── src/components/ui/             # shadcn UI components
+│   ├── package.json                   # Next.js + AI SDK + assistant-ui deps
+│   └── tsconfig.json                  # TypeScript config
 ```
-
-> Frontend (`frontend/`) and infra files will appear here as they are scaffolded.
 
 ---
 
@@ -188,7 +195,7 @@ MultiModalAgentsHackathon/
 | 5 | Railtracks agent flow (query) | ✅ Done | backend/agent.py — 4 tool nodes + agent + flow |
 | 6 | Railtracks background ingest flow | ✅ Done | Seed ingest on startup in main.py lifespan + /api/ingest |
 | 7 | FastAPI backend API | ✅ Done | backend/main.py — /api/chat, /api/health, /api/ingest |
-| 8 | assistant-ui frontend | 🔲 Not started | |
+| 8 | assistant-ui frontend | ✅ Done | Next.js 16 + assistant-ui + AI SDK v5 |
 | 9 | DigitalOcean deployment | 🔲 Not started | |
 | 10 | Demo video + Devpost submission | 🔲 Not started | |
 
@@ -203,6 +210,10 @@ MultiModalAgentsHackathon/
   docstrings. Agents are `rt.agent_node(...)`. Flows are `rt.Flow(...)`.
 - **Senso pattern**: Ingest via `POST /content/raw`, search via `POST /search`.
   See `senso-ingest` and `senso-search` skills for details.
+- **AI SDK v5 breaking changes**: `toTextStreamResponse()` not `toDataStreamResponse()`.
+  `useChatRuntime` uses `transport: new TextStreamChatTransport({ api })` not `{ api }` directly.
+- **assistant-ui auto-generated components** have `render=` prop patterns that may
+  not type-check with latest radix/shadcn. Use `@ts-nocheck` on those files.
 - **assistant-ui pattern**: Scaffold with `npx assistant-ui create`, connect to
   FastAPI backend via AI SDK route handler.
 
